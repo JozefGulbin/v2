@@ -496,7 +496,7 @@ export default function MapPage() {
                        🌲
                    </div>
                    <h1 className="text-5xl font-black text-white drop-shadow-md tracking-tight">TapuTapu</h1>
-                   <div className="text-white/80 font-mono text-xs mt-1 bg-black/10 px-2 py-0.5 rounded">v3.3</div>
+                   <div className="text-white/80 font-mono text-xs mt-1 bg-black/10 px-2 py-0.5 rounded">v5.1</div>
                    <p className="text-white/90 text-sm font-bold tracking-widest mt-2 uppercase">Saugi kelionė visiems</p>
                </div>
                
