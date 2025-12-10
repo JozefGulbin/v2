@@ -1,0 +1,25 @@
+﻿// pages/add-spot.js
+
+import dynamic from 'next/dynamic';
+import Head from 'next/head';
+
+// We dynamically import the PinMap component to avoid issues with server-side rendering
+const PinMap = dynamic(
+    () => import('../components/PinMap.jsx'), 
+    { ssr: false } // This is crucial
+);
+
+export default function AddSpotPage() {
+    return (
+        <div>
+            <Head>
+                <title>Pridėti naują tašką</title>
+            </Head>
+            <main>
+                <div style={{ height: '100vh', width: '100%' }}>
+                    <PinMap />
+                </div>
+            </main>
+        </div>
+    );
+}
