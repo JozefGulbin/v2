@@ -1,7 +1,12 @@
-﻿
-import React from 'react';
+﻿import React from 'react';
 
-export default function PasiklydauView({ lat, lng, onClose }) {
+interface PasiklydauViewProps {
+  lat: number;
+  lng: number;
+  onClose: () => void;
+}
+
+export default function PasiklydauView({ lat, lng, onClose }: PasiklydauViewProps) {
   const handleSignal = () => {
     alert("SOS signalas išsiųstas!");
   };
