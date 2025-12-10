@@ -130,7 +130,7 @@ const TrailCard: React.FC<{
 
 // --- Main Page Component ---
 
-export default function Home() {
+export default function TrailsPage() {
   const [location, setLocation] = useState("");
   const [trails, setTrails] = useState<Trail[]>([]);
   const [favorites, setFavorites] = useState<Trail[]>([]);

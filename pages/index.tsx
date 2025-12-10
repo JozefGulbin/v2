@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useRef } from "react";
 import Head from 'next/head';
 import { useRouter } from 'next/router';
@@ -71,7 +72,6 @@ export default function MapPage() {
     const L = (window as any).L;
 
     if (mapRef.current) {
-        // If map exists, just ensure it's rendering correctly
         mapRef.current.invalidateSize();
         return; 
     }
@@ -103,8 +103,6 @@ export default function MapPage() {
 
     map.on('locationerror', (e: any) => {
         console.warn("Leaflet locate error:", e.message);
-        // Don't show annoying popup, just fail silently. 
-        // User can tap map to set location manually.
     });
 
     // Click handler
@@ -121,16 +119,15 @@ export default function MapPage() {
   // --- MAP RENDER LOGIC ---
   useEffect(() => {
       // Initialize map on mount
-      setTimeout(initMap, 100);
+      setTimeout(initMap, 500); // Slight delay to ensure DOM is ready
   }, []);
 
   // When switching TO map view, ensure resizing is correct and map is ready
   useEffect(() => {
     if (viewMode === 'map' && mapRef.current) {
         const map = mapRef.current;
-        // Force resize multiple times to catch animations
-        setTimeout(() => map.invalidateSize(), 10);
-        setTimeout(() => map.invalidateSize(), 200);
+        // CRITICAL: Invalidate size to prevent white map
+        setTimeout(() => map.invalidateSize(), 100);
         
         // Re-center if we have location
         if (userLocationRef.current && isFollowingUser) {
@@ -141,23 +138,20 @@ export default function MapPage() {
 
 
   const handleMapClick = (latlng: {lat: number, lng: number}) => {
-      // 1. MANUAL GPS FALLBACK (For Mobile Testing without HTTPS)
-      // If we don't have a user location yet, the first click sets "My Location"
+      // 1. MANUAL GPS FALLBACK
       if (!userLocationRef.current) {
-          const newLoc = { lat: latlng.lat, lng: latlng.lng, accuracy: 50 }; // Fake accuracy
+          const newLoc = { lat: latlng.lat, lng: latlng.lng, accuracy: 50 }; 
           setUserLocation(newLoc);
           updateUserMarker(latlng.lat, latlng.lng, 50);
-          setNotification({type: 'info', msg: 'Vieta nustatyta rankiniu būdu (GPS Simuliacija)'});
+          setNotification({type: 'info', msg: 'Vieta nustatyta rankiniu būdu'});
           return;
       }
 
-      // 2. Normal Routing Logic
+      // 2. Routing Logic
       if (builderModeRef.current) {
-          // Append B, C, D...
           addWaypoint(latlng);
           setNotification({type: 'info', msg: 'Tarpinis taškas pridėtas'});
       } else {
-          // Normal mode: Set Pin A directly
           setWaypoints([latlng]);
           setNotification({type: 'info', msg: 'Tikslo vieta nustatyta'});
       }
@@ -195,9 +189,9 @@ export default function MapPage() {
           destMarkerRef.current = null;
       }
 
-      // 2. Draw Markers A, B, C...
+      // 2. Draw Markers
       points.forEach((pt, index) => {
-          const letter = String.fromCharCode(65 + index); // A, B, C...
+          const letter = String.fromCharCode(65 + index);
           const icon = L.divIcon({
               className: 'bg-transparent',
               html: `<div class="relative">
@@ -228,7 +222,6 @@ export default function MapPage() {
       }
 
       if (!userLocationRef.current) {
-          // Should not happen due to manual fallback, but just in case
           setNotification({type: 'error', msg: 'Spustelėkite žemėlapį, kad nustatytumėte savo vietą'});
           return;
       }
@@ -273,11 +266,7 @@ export default function MapPage() {
     };
 
     const onGeoError = (err: any) => {
-        console.warn("GPS Error:", err);
         setIsLocating(false);
-        if (err.code === 1 && !userLocationRef.current) {
-             setNotification({type: 'error', msg: 'GPS uždraustas. Spustelėkite žemėlapį nustatymui.'});
-        }
     };
 
     navigator.geolocation.getCurrentPosition(onGeoSuccess, onGeoError, { enableHighAccuracy: true });
@@ -299,6 +288,7 @@ export default function MapPage() {
         html: `
           <div class="relative flex h-4 w-4 -translate-x-1/2 -translate-y-1/2">
             <span class="absolute inline-flex h-full w-full rounded-full bg-blue-500 border-2 border-white shadow-sm"></span>
+            <span class="relative inline-flex rounded-full h-4 w-4 bg-blue-600"></span>
           </div>`,
         iconSize: [0, 0]
       });
@@ -356,9 +346,6 @@ export default function MapPage() {
     } else if (transportMode === 'cycling') {
         serviceUrl = 'https://routing.openstreetmap.de/routed-bike/route/v1';
         profile = 'driving';
-    } else {
-        serviceUrl = 'https://router.project-osrm.org/route/v1';
-        profile = 'car';
     }
 
     const waypoints = points.map(p => L.latLng(p.lat, p.lng));
@@ -377,18 +364,15 @@ export default function MapPage() {
               styles: [{ color: '#94a3b8', opacity: 0.6, weight: 6 }]
           },
           showAlternatives: true,
-          show: false, // Hide default container
+          show: false, // Hides the itinerary container
           addWaypoints: false,
           draggableWaypoints: false,
           fitSelectedRoutes: false,
           createMarker: () => null 
         }).addTo(mapRef.current);
 
-        // Handle Found Routes
         control.on('routesfound', (e: any) => {
             setIsCalculatingRoute(false);
-            
-            // Map Leaflet routes to our state
             const foundRoutes = e.routes.map((r: any, i: number) => ({
                 id: i,
                 summary: r.summary,
@@ -398,22 +382,19 @@ export default function MapPage() {
                 isDirect: false,
                 routeObj: r
             }));
-            
             setRoutes(foundRoutes);
         });
         
-        // Map Selection Sync (Clicking Grey Lines)
         control.on('routeselected', (e: any) => {
             const selectedRoute = e.route;
             setRoutes(prev => prev.map((r, i) => {
-                // Fuzzy match based on total distance to identify the selected route
                 const match = Math.abs(r.summary.totalDistance - selectedRoute.summary.totalDistance) < 1; 
                 return { ...r, isSelected: match };
             }));
         });
 
         control.on('routingerror', () => {
-            console.warn("Routing failed, fallback to direct.");
+            console.warn("Routing failed.");
             setNotification({type: 'info', msg: 'Maršrutas nerastas. Rodomas tiesus atstumas.'});
             if(points.length >= 2) drawDirectFallback(points[0], points[points.length-1]);
         });
@@ -432,14 +413,15 @@ export default function MapPage() {
       const selectedRouteInfo = routes[index];
       if (!selectedRouteInfo) return;
 
-      // 1. Update UI State
       setRoutes(prev => prev.map((r, i) => ({ ...r, isSelected: i === index })));
 
-      // 2. Update Map Line Visuals
       if (selectedRouteInfo.routeObj) {
-          // This fires the internal Leaflet event that actually switches the line colors
-          // It tricks the plugin into thinking the user clicked the line on the map
-          routingControlRef.current.fire('routeselected', { route: selectedRouteInfo.routeObj });
+          try {
+             // Wrap in try-catch to prevent classList error if container is hidden
+             routingControlRef.current.fire('routeselected', { route: selectedRouteInfo.routeObj });
+          } catch (e) {
+             // Ignore visual update errors in headless mode
+          }
       }
   };
 
@@ -498,17 +480,16 @@ export default function MapPage() {
         </div>
       )}
 
-      {/* MAP - ALWAYS RENDERED, Z-0 */}
+      {/* MAP - ALWAYS RENDERED (Removed hidden class) */}
       <div 
         ref={mapContainerRef} 
-        className={`absolute inset-0 z-0 ${viewMode !== 'map' ? 'hidden' : ''}`}
+        className="absolute inset-0 z-0"
       />
 
       {/* LANDING PAGE - OVERLAY Z-50 */}
       {viewMode === 'landing' && (
         <div className="absolute inset-0 z-50 bg-gradient-to-br from-teal-400 via-emerald-400 to-blue-500 flex flex-col p-6 items-center justify-center animate-fade-in">
            
-           {/* Glass Card */}
            <div className="w-full max-w-sm bg-white/20 backdrop-blur-xl border border-white/40 rounded-[2rem] p-8 shadow-2xl flex flex-col gap-8 items-center text-center">
                
                <div className="flex flex-col items-center">
@@ -516,6 +497,7 @@ export default function MapPage() {
                        🌲
                    </div>
                    <h1 className="text-5xl font-black text-white drop-shadow-md tracking-tight">TapuTapu</h1>
+                   <div className="text-white/80 font-mono text-xs mt-1 bg-black/10 px-2 py-0.5 rounded">v2.1</div>
                    <p className="text-white/90 text-sm font-bold tracking-widest mt-2 uppercase">Saugi kelionė visiems</p>
                </div>
                

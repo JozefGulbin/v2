@@ -1,0 +1,7 @@
+{
+  "requestFramePermissions": [
+    "geolocation"
+  ],
+  "name": "TapuTapu",
+  "description": "AI Hiking Companion & GPS Tracker"
+}
