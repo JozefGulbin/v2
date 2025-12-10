@@ -1,7 +1,8 @@
-
 import React, { useState, useEffect, useRef } from "react";
 import Head from 'next/head';
-import PasiklydauView from "../components/PasiklydauView";
+import { useRouter } from 'next/router';
+// Updated import to new component name
+import LostView from "@/components/LostView";
 
 type ViewMode = 'landing' | 'map' | 'lost';
 type TransportMode = 'walking' | 'cycling' | 'driving';
@@ -17,6 +18,7 @@ interface RouteInfo {
 }
 
 export default function MapPage() {
+  const router = useRouter();
   const [viewMode, setViewMode] = useState<ViewMode>('landing');
   const [transportMode, setTransportMode] = useState<TransportMode>('walking');
   const [routes, setRoutes] = useState<RouteInfo[]>([]);
@@ -68,13 +70,17 @@ export default function MapPage() {
     
     const L = (window as any).L;
 
-    if (mapRef.current) return; // Prevent re-initialization
+    if (mapRef.current) {
+        // If map exists, just ensure it's rendering correctly
+        mapRef.current.invalidateSize();
+        return; 
+    }
 
     // Init Map
     const map = L.map(mapContainerRef.current, {
       zoomControl: false,
       attributionControl: false,
-    }).setView([54.6872, 25.2797], 13); // Default view, will be overridden by locate
+    }).setView([54.6872, 25.2797], 13); // Default view
 
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
       maxZoom: 19,
@@ -83,8 +89,8 @@ export default function MapPage() {
 
     L.control.zoom({ position: 'bottomright' }).addTo(map);
 
-    // Auto-Locate immediately on load
-    map.locate({ setView: true, maxZoom: 16 });
+    // Auto-Locate immediately with High Accuracy
+    map.locate({ setView: true, maxZoom: 16, enableHighAccuracy: true });
 
     map.on('locationfound', (e: any) => {
         const { lat, lng } = e.latlng;
@@ -93,6 +99,12 @@ export default function MapPage() {
              setUserLocation(newLoc);
              updateUserMarker(lat, lng, e.accuracy);
         }
+    });
+
+    map.on('locationerror', (e: any) => {
+        console.warn("Leaflet locate error:", e.message);
+        // Don't show annoying popup, just fail silently. 
+        // User can tap map to set location manually.
     });
 
     // Click handler
@@ -107,27 +119,39 @@ export default function MapPage() {
   };
 
   // --- MAP RENDER LOGIC ---
-  // We initialize map ONCE. We do NOT hide it with 'display:none' or 'hidden' class to prevent white screen issues.
-  // Instead, the Landing Page sits on TOP of it (z-index).
   useEffect(() => {
-      // Small delay to ensure DOM is ready
+      // Initialize map on mount
       setTimeout(initMap, 100);
   }, []);
 
-  // When switching TO map view, ensure resizing is correct just in case
+  // When switching TO map view, ensure resizing is correct and map is ready
   useEffect(() => {
     if (viewMode === 'map' && mapRef.current) {
-        setTimeout(() => {
-            mapRef.current.invalidateSize();
-            if (userLocationRef.current && isFollowingUser) {
-                mapRef.current.panTo([userLocationRef.current.lat, userLocationRef.current.lng], { animate: true });
-            }
-        }, 100);
+        const map = mapRef.current;
+        // Force resize multiple times to catch animations
+        setTimeout(() => map.invalidateSize(), 10);
+        setTimeout(() => map.invalidateSize(), 200);
+        
+        // Re-center if we have location
+        if (userLocationRef.current && isFollowingUser) {
+            map.panTo([userLocationRef.current.lat, userLocationRef.current.lng], { animate: true });
+        }
     }
   }, [viewMode]);
 
 
   const handleMapClick = (latlng: {lat: number, lng: number}) => {
+      // 1. MANUAL GPS FALLBACK (For Mobile Testing without HTTPS)
+      // If we don't have a user location yet, the first click sets "My Location"
+      if (!userLocationRef.current) {
+          const newLoc = { lat: latlng.lat, lng: latlng.lng, accuracy: 50 }; // Fake accuracy
+          setUserLocation(newLoc);
+          updateUserMarker(latlng.lat, latlng.lng, 50);
+          setNotification({type: 'info', msg: 'Vieta nustatyta rankiniu būdu (GPS Simuliacija)'});
+          return;
+      }
+
+      // 2. Normal Routing Logic
       if (builderModeRef.current) {
           // Append B, C, D...
           addWaypoint(latlng);
@@ -204,7 +228,8 @@ export default function MapPage() {
       }
 
       if (!userLocationRef.current) {
-          setNotification({type: 'error', msg: 'Laukiama GPS signalo...'});
+          // Should not happen due to manual fallback, but just in case
+          setNotification({type: 'error', msg: 'Spustelėkite žemėlapį, kad nustatytumėte savo vietą'});
           return;
       }
 
@@ -247,8 +272,12 @@ export default function MapPage() {
         }
     };
 
-    const onGeoError = () => {
+    const onGeoError = (err: any) => {
+        console.warn("GPS Error:", err);
         setIsLocating(false);
+        if (err.code === 1 && !userLocationRef.current) {
+             setNotification({type: 'error', msg: 'GPS uždraustas. Spustelėkite žemėlapį nustatymui.'});
+        }
     };
 
     navigator.geolocation.getCurrentPosition(onGeoSuccess, onGeoError, { enableHighAccuracy: true });
@@ -472,7 +501,7 @@ export default function MapPage() {
       {/* MAP - ALWAYS RENDERED, Z-0 */}
       <div 
         ref={mapContainerRef} 
-        className="absolute inset-0 z-0"
+        className={`absolute inset-0 z-0 ${viewMode !== 'map' ? 'hidden' : ''}`}
       />
 
       {/* LANDING PAGE - OVERLAY Z-50 */}
@@ -493,17 +522,25 @@ export default function MapPage() {
                <div className="w-full space-y-4">
                    <button 
                      onClick={() => setViewMode('map')}
-                     className="w-full py-6 bg-white text-slate-800 rounded-2xl font-black text-2xl shadow-xl active:scale-95 transition-transform flex items-center justify-center gap-4 hover:bg-slate-50 group"
+                     className="w-full py-5 bg-white text-slate-800 rounded-2xl font-black text-xl shadow-xl active:scale-95 transition-transform flex items-center justify-center gap-4 hover:bg-slate-50 group"
                    >
-                     <span className="text-3xl group-hover:animate-bounce">🗺️</span>
+                     <span className="text-2xl group-hover:animate-bounce">🗺️</span>
                      Kur aš esu?
                    </button>
                    
                    <button 
-                     onClick={() => setViewMode('lost')}
-                     className="w-full py-6 bg-gradient-to-r from-orange-500 to-red-500 text-white rounded-2xl font-black text-2xl shadow-xl shadow-orange-500/40 active:scale-95 transition-transform flex items-center justify-center gap-4 hover:brightness-110 group"
+                     onClick={() => router.push('/trails')}
+                     className="w-full py-5 bg-emerald-600 text-white rounded-2xl font-black text-xl shadow-xl shadow-emerald-500/20 active:scale-95 transition-transform flex items-center justify-center gap-4 hover:bg-emerald-700 group"
                    >
-                     <span className="text-3xl group-hover:animate-pulse">🆘</span>
+                     <span className="text-2xl group-hover:rotate-12 transition-transform">🏔️</span>
+                     AI Trail Finder
+                   </button>
+
+                   <button 
+                     onClick={() => setViewMode('lost')}
+                     className="w-full py-5 bg-gradient-to-r from-orange-500 to-red-500 text-white rounded-2xl font-black text-xl shadow-xl shadow-orange-500/40 active:scale-95 transition-transform flex items-center justify-center gap-4 hover:brightness-110 group"
+                   >
+                     <span className="text-2xl group-hover:animate-pulse">🆘</span>
                      PASIKLYDAU!
                    </button>
                </div>
@@ -644,7 +681,7 @@ export default function MapPage() {
       {/* LOST VIEW - OVERLAY Z-60 */}
       {viewMode === 'lost' && (
         <div className="absolute inset-0 z-[60] bg-white/50 backdrop-blur-sm flex items-end justify-center pb-6 px-4 animate-fade-in">
-            <PasiklydauView lat={userLocation?.lat || 0} lng={userLocation?.lng || 0} onClose={() => setViewMode('landing')} />
+            <LostView lat={userLocation?.lat || 0} lng={userLocation?.lng || 0} onClose={() => setViewMode('landing')} />
         </div>
       )}
     </div>

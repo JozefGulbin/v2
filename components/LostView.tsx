@@ -1,12 +1,12 @@
 ﻿import React from 'react';
 
-interface PasiklydauViewProps {
+interface LostViewProps {
   lat: number;
   lng: number;
   onClose: () => void;
 }
 
-export default function PasiklydauView({ lat, lng, onClose }: PasiklydauViewProps) {
+export default function LostView({ lat, lng, onClose }: LostViewProps) {
   const handleSignal = () => {
     alert("SOS signalas išsiųstas!");
   };
