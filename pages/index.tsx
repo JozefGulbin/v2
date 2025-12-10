@@ -2,7 +2,6 @@
 import React, { useState, useEffect, useRef } from "react";
 import Head from 'next/head';
 import { useRouter } from 'next/router';
-// Updated import to new component name
 import LostView from "@/components/LostView";
 
 type ViewMode = 'landing' | 'map' | 'lost';
@@ -497,7 +496,7 @@ export default function MapPage() {
                        🌲
                    </div>
                    <h1 className="text-5xl font-black text-white drop-shadow-md tracking-tight">TapuTapu</h1>
-                   <div className="text-white/80 font-mono text-xs mt-1 bg-black/10 px-2 py-0.5 rounded">v2.1</div>
+                   <div className="text-white/80 font-mono text-xs mt-1 bg-black/10 px-2 py-0.5 rounded">v2.2</div>
                    <p className="text-white/90 text-sm font-bold tracking-widest mt-2 uppercase">Saugi kelionė visiems</p>
                </div>
                
