@@ -496,7 +496,7 @@ export default function MapPage() {
                        🌲
                    </div>
                    <h1 className="text-5xl font-black text-white drop-shadow-md tracking-tight">TapuTapu</h1>
-                   <div className="text-white/80 font-mono text-xs mt-1 bg-black/10 px-2 py-0.5 rounded">v2.6</div>
+                   <div className="text-white/80 font-mono text-xs mt-1 bg-black/10 px-2 py-0.5 rounded">v2.7</div>
                    <p className="text-white/90 text-sm font-bold tracking-widest mt-2 uppercase">Saugi kelionė visiems</p>
                </div>
                
@@ -511,7 +511,7 @@ export default function MapPage() {
                    
                    <button 
                      onClick={() => router.push('/trails')}
-                     className="w-full py-5 bg-emerald-600 text-white rounded-2xl font-black text-xl shadow-xl shadow-emerald-500/20 active:scale-95 transition-transform flex items-center justify-center gap-4 hover:bg-emerald-700 group"
+                     className="w-full py-5 bg-emerald-600 text-white rounded-2xl font-black text-xl shadow-xl shadow-emerald-500/20 active:scale-95 transition-transform flex items-center justify-center gap-4 hover:emerald-700 group"
                    >
                      <span className="text-2xl group-hover:rotate-12 transition-transform">🏔️</span>
                      AI Trail Finder
