@@ -4,59 +4,100 @@ import Head from 'next/head';
 import { useRouter } from 'next/router';
 import LostView from "@/components/LostView";
 
-type ViewMode = 'landing' | 'map' | 'lost';
+type ViewMode = 'landing' | 'map' | 'lost' | 'navigation';
 type TransportMode = 'walking' | 'cycling' | 'driving';
 
 interface RouteInfo {
   id: number;
   summary: { totalDistance: number; totalTime: number };
   coordinates: any[];
+  instructions: any[];
+  waypoints: any[];
+  waypointIndices: number[]; // Store indices for segment splitting
   name?: string;
-  isSelected: boolean;
-  isDirect?: boolean;
-  routeObj?: any; // Reference to the internal Leaflet route object
+  routeObj?: any; 
 }
 
 export default function MapPage() {
-  const router = useRouter();
+  // --- STATE ---
+  // Start in 'landing' mode as requested
   const [viewMode, setViewMode] = useState<ViewMode>('landing');
   const [transportMode, setTransportMode] = useState<TransportMode>('walking');
+  
+  // Routing State
   const [routes, setRoutes] = useState<RouteInfo[]>([]);
-  
-  // State for UI
-  const [userLocation, setUserLocation] = useState<{ lat: number; lng: number, accuracy: number } | null>(null);
-  
-  // Route Builder State
-  const [isBuilderMode, setIsBuilderMode] = useState(false);
-  const [waypoints, setWaypoints] = useState<{lat: number, lng: number}[]>([]);
+  const [selectedRouteIndex, setSelectedRouteIndex] = useState(0);
 
-  const [isLocating, setIsLocating] = useState(false);
-  const [isCalculatingRoute, setIsCalculatingRoute] = useState(false);
-  const [notification, setNotification] = useState<{type: 'error' | 'info', msg: string} | null>(null);
-  const [isFollowingUser, setIsFollowingUser] = useState(false);
+  const [userLocation, setUserLocation] = useState<{ lat: number; lng: number, accuracy: number, speed: number | null, heading: number | null } | null>(null);
   
-  // Refs
-  const userLocationRef = useRef<{ lat: number; lng: number } | null>(null);
+  // Route Building
+  const [isBuilderMode, setIsBuilderMode] = useState(false); 
+  const [waypoints, setWaypoints] = useState<{lat: number, lng: number}[]>([]);
+  
+  // Navigation State
+  const [navStats, setNavStats] = useState({ speed: 0, distanceRem: 0, timeRem: 0 });
+  const [showSegments, setShowSegments] = useState(false);
+
+  // Notification System
+  const [notification, setNotification] = useState<{type: 'error' | 'info', msg: string} | null>(null);
+
+  // --- REFS ---
   const mapRef = useRef<any>(null);
+  const mapContainerRef = useRef<HTMLDivElement>(null);
+  const routingControlRef = useRef<any>(null);
+  const routePolylinesRef = useRef<any[]>([]); // Store custom route lines
+  const segmentLayersRef = useRef<any[]>([]); 
+  const highlightLayerRef = useRef<any>(null);
   const userMarkerRef = useRef<any>(null);
   const accuracyCircleRef = useRef<any>(null);
-  const waypointMarkersRef = useRef<any[]>([]);
-  const routingControlRef = useRef<any>(null);
-  const fallbackPolylineRef = useRef<any>(null);
-  const mapContainerRef = useRef<HTMLDivElement>(null);
   const gpsWatchId = useRef<number | null>(null);
+  const markerLayersRef = useRef<any[]>([]);
+  
+  const userLocationRef = useRef<{ lat: number; lng: number } | null>(null);
+  const isNavigatingRef = useRef(false);
+  const destinationRef = useRef<{ lat: number; lng: number } | null>(null);
+  const waypointsRef = useRef<{lat: number, lng: number}[]>([]);
   const builderModeRef = useRef(false);
-  const destMarkerRef = useRef<any>(null);
 
-  // Sync Ref for builder mode
-  useEffect(() => { builderModeRef.current = isBuilderMode; }, [isBuilderMode]);
-
-  // Sync Ref for user location
-  useEffect(() => {
-    if (userLocation) userLocationRef.current = { lat: userLocation.lat, lng: userLocation.lng };
+  // --- SYNC REFS ---
+  useEffect(() => { 
+      if (userLocation) userLocationRef.current = { lat: userLocation.lat, lng: userLocation.lng };
   }, [userLocation]);
 
-  // Notifications
+  useEffect(() => {
+      waypointsRef.current = waypoints;
+      if (waypoints.length > 0) {
+          destinationRef.current = waypoints[waypoints.length - 1];
+      } else {
+          destinationRef.current = null;
+      }
+      // Reset selection when points change
+      setSelectedRouteIndex(0);
+  }, [waypoints]);
+
+  useEffect(() => {
+      builderModeRef.current = isBuilderMode;
+  }, [isBuilderMode]);
+  
+  useEffect(() => {
+      isNavigatingRef.current = viewMode === 'navigation';
+      // Prevent screen sleep during navigation
+      if (viewMode === 'navigation' && 'wakeLock' in navigator) {
+          try { (navigator as any).wakeLock.request('screen'); } catch(e){}
+      }
+      
+      // Resize map when switching from Landing to Map
+      if (viewMode === 'map' && mapRef.current) {
+          setTimeout(() => {
+              mapRef.current.invalidateSize();
+              if (userLocationRef.current) {
+                  mapRef.current.panTo([userLocationRef.current.lat, userLocationRef.current.lng], { animate: true });
+              }
+          }, 100);
+      }
+  }, [viewMode]);
+
+  // --- NOTIFICATIONS ---
   useEffect(() => {
     if (notification) {
       const timer = setTimeout(() => setNotification(null), 3000);
@@ -65,109 +106,163 @@ export default function MapPage() {
   }, [notification]);
 
   // --- MAP INITIALIZATION ---
-  const initMap = () => {
-    if (typeof window === 'undefined' || !(window as any).L || !mapContainerRef.current) return;
-    
-    const L = (window as any).L;
-
-    if (mapRef.current) {
-        mapRef.current.invalidateSize();
-        return; 
-    }
-
-    // Init Map
-    const map = L.map(mapContainerRef.current, {
-      zoomControl: false,
-      attributionControl: false,
-    }).setView([54.6872, 25.2797], 13); // Default view
-
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      maxZoom: 19,
-      attribution: '© OpenStreetMap'
-    }).addTo(map);
-
-    L.control.zoom({ position: 'bottomright' }).addTo(map);
-
-    // Auto-Locate immediately with High Accuracy
-    map.locate({ setView: true, maxZoom: 16, enableHighAccuracy: true });
-
-    map.on('locationfound', (e: any) => {
-        const { lat, lng } = e.latlng;
-        if (!userLocationRef.current) {
-             const newLoc = { lat, lng, accuracy: e.accuracy };
-             setUserLocation(newLoc);
-             updateUserMarker(lat, lng, e.accuracy);
-        }
-    });
-
-    map.on('locationerror', (e: any) => {
-        console.warn("Leaflet locate error:", e.message);
-    });
-
-    // Click handler
-    map.on('click', (e: any) => {
-      handleMapClick(e.latlng);
-    });
-
-    map.on('dragstart', () => setIsFollowingUser(false));
-
-    mapRef.current = map;
-    startGpsTracking();
-  };
-
-  // --- MAP RENDER LOGIC ---
   useEffect(() => {
-      // Initialize map on mount
-      setTimeout(initMap, 500); // Slight delay to ensure DOM is ready
+      const initMap = () => {
+        if (typeof window === 'undefined' || !(window as any).L || !mapContainerRef.current) return;
+        if (mapRef.current) return;
+
+        const L = (window as any).L;
+        const map = L.map(mapContainerRef.current, {
+          zoomControl: false,
+          attributionControl: false,
+        }).setView([54.6872, 25.2797], 13); 
+
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+          maxZoom: 19,
+          attribution: '© OpenStreetMap'
+        }).addTo(map);
+
+        L.control.zoom({ position: 'bottomright' }).addTo(map);
+
+        // MAP CLICK LISTENER
+        map.on('click', (e: any) => {
+            if (isNavigatingRef.current) return;
+
+            // Clear highlight
+            if (highlightLayerRef.current) {
+                map.removeLayer(highlightLayerRef.current);
+                highlightLayerRef.current = null;
+            }
+
+            // --- LOGIC v10.0 ---
+            // 1. If Builder Mode is ON -> Append Pin
+            if (builderModeRef.current) {
+                addWaypoint(e.latlng);
+                return;
+            }
+
+            // 2. If Route is Empty -> Allow adding Pin A (Single Destination Mode)
+            if (waypointsRef.current.length === 0) {
+                addWaypoint(e.latlng);
+                return;
+            }
+            
+            // 3. If Route Exists & Builder OFF -> Replace Pin A (Standard GPS behavior)
+            // But if multiple pins exist, we lock it to prevent accidental deletions
+            if (waypointsRef.current.length === 1) {
+                 setWaypoints([e.latlng]); // Move the single pin
+                 return;
+            }
+
+            // 4. Locked
+            setNotification({type: 'info', msg: "Paspauskite '+', kad pridėtumėte taškus"});
+        });
+
+        // Initial Location
+        map.locate({ setView: true, maxZoom: 16, enableHighAccuracy: true });
+
+        map.on('locationfound', (e: any) => {
+            const { lat, lng } = e.latlng;
+            const newLoc = { lat, lng, accuracy: e.accuracy, speed: null, heading: null };
+            setUserLocation(newLoc);
+            updateUserMarker(newLoc);
+        });
+        
+        map.on('locationerror', () => {
+             setNotification({type: 'error', msg: "Nepavyko nustatyti vietos"});
+        });
+
+        mapRef.current = map;
+        startGpsTracking();
+      };
+
+      // Delay init slightly to ensure container is ready
+      setTimeout(initMap, 100);
   }, []);
 
-  // When switching TO map view, ensure resizing is correct and map is ready
-  useEffect(() => {
-    if (viewMode === 'map' && mapRef.current) {
-        const map = mapRef.current;
-        // CRITICAL: Invalidate size to prevent white map
-        setTimeout(() => map.invalidateSize(), 100);
+  const addWaypoint = (latlng: {lat: number, lng: number}) => {
+      setWaypoints(prev => [...prev, latlng]);
+  };
+
+  // --- GPS TRACKING ---
+  const startGpsTracking = () => {
+    if (!navigator.geolocation) return;
+
+    if (gpsWatchId.current) navigator.geolocation.clearWatch(gpsWatchId.current);
+
+    const onGeoSuccess = (pos: GeolocationPosition) => {
+        const { latitude, longitude, accuracy, speed, heading } = pos.coords;
+        const newLoc = { lat: latitude, lng: longitude, accuracy, speed, heading };
         
-        // Re-center if we have location
-        if (userLocationRef.current && isFollowingUser) {
-            map.panTo([userLocationRef.current.lat, userLocationRef.current.lng], { animate: true });
+        setUserLocation(newLoc);
+        updateUserMarker(newLoc);
+
+        if (isNavigatingRef.current && mapRef.current && destinationRef.current) {
+            mapRef.current.setView([latitude, longitude], 19, { animate: true });
+            
+            const currentSpeedKmh = speed ? Math.round(speed * 3.6) : 0;
+            const dist = getDistanceFromLatLonInM(latitude, longitude, destinationRef.current.lat, destinationRef.current.lng);
+            const effectiveSpeed = (speed && speed > 0.5) ? speed : 1.4; 
+            const time = dist / effectiveSpeed;
+
+            setNavStats({
+                speed: currentSpeedKmh,
+                distanceRem: dist,
+                timeRem: time
+            });
         }
+    };
+
+    const onGeoError = (err: any) => console.warn("GPS Watch Error", err);
+
+    navigator.geolocation.getCurrentPosition(onGeoSuccess, onGeoError, { enableHighAccuracy: true });
+    gpsWatchId.current = navigator.geolocation.watchPosition(onGeoSuccess, onGeoError, { 
+        enableHighAccuracy: true, 
+        timeout: 2000 
+    });
+  };
+
+  const updateUserMarker = (loc: { lat: number, lng: number, accuracy: number, heading: number | null }) => {
+    const L = (window as any).L;
+    if (!mapRef.current || !L) return;
+
+    if (!userMarkerRef.current) {
+      const userIcon = L.divIcon({
+        className: 'bg-transparent',
+        html: `
+          <div class="relative flex h-5 w-5 -translate-x-1/2 -translate-y-1/2">
+            <span class="absolute inline-flex h-full w-full rounded-full bg-blue-500 border-2 border-white shadow-sm opacity-50 animate-ping"></span>
+            <span class="relative inline-flex rounded-full h-5 w-5 bg-blue-600 border-2 border-white shadow-md">
+               ${loc.heading ? '<div style="position:absolute; top:-4px; left:50%; transform:translateX(-50%); width:0; height:0; border-left:4px solid transparent; border-right:4px solid transparent; border-bottom:6px solid white;"></div>' : ''}
+            </span>
+          </div>`,
+        iconSize: [0, 0]
+      });
+      userMarkerRef.current = L.marker([loc.lat, loc.lng], { icon: userIcon, zIndexOffset: 1000 }).addTo(mapRef.current);
+    } else {
+      userMarkerRef.current.setLatLng([loc.lat, loc.lng]);
     }
-  }, [viewMode]);
 
+    if (!accuracyCircleRef.current) {
+        accuracyCircleRef.current = L.circle([loc.lat, loc.lng], {
+            radius: loc.accuracy,
+            color: '#3b82f6',
+            fillColor: '#3b82f6',
+            fillOpacity: 0.05,
+            weight: 0,
+        }).addTo(mapRef.current);
+    } else {
+        accuracyCircleRef.current.setLatLng([loc.lat, loc.lng]);
+        accuracyCircleRef.current.setRadius(loc.accuracy);
+    }
+  };
 
-  const handleMapClick = (latlng: {lat: number, lng: number}) => {
-      // 1. MANUAL GPS FALLBACK
-      if (!userLocationRef.current) {
-          const newLoc = { lat: latlng.lat, lng: latlng.lng, accuracy: 50 }; 
-          setUserLocation(newLoc);
-          updateUserMarker(latlng.lat, latlng.lng, 50);
-          setNotification({type: 'info', msg: 'Vieta nustatyta rankiniu būdu'});
-          return;
-      }
-
-      // 2. Routing Logic
-      if (builderModeRef.current) {
-          addWaypoint(latlng);
-          setNotification({type: 'info', msg: 'Tarpinis taškas pridėtas'});
+  const reCenterMap = () => {
+      if (userLocation && mapRef.current) {
+          mapRef.current.setView([userLocation.lat, userLocation.lng], 16, { animate: true });
       } else {
-          setWaypoints([latlng]);
-          setNotification({type: 'info', msg: 'Tikslo vieta nustatyta'});
-      }
-  };
-
-  const addWaypoint = (point: {lat: number, lng: number}) => {
-      setWaypoints(prev => [...prev, point]);
-  };
-
-  const clearWaypoints = () => {
-      setWaypoints([]);
-      cleanupRouting();
-      waypointMarkersRef.current.forEach(m => m.remove());
-      waypointMarkersRef.current = [];
-      if (destMarkerRef.current) {
-          destMarkerRef.current.remove();
-          destMarkerRef.current = null;
+          setNotification({type:'info', msg:'Nustatoma vieta...'});
+          if (mapRef.current) mapRef.current.locate({ setView: true, maxZoom: 16 });
       }
   };
 
@@ -175,315 +270,328 @@ export default function MapPage() {
       setWaypoints(prev => prev.slice(0, -1));
   };
 
-  // --- ROUTING CORE ---
-  const updateRoute = (points: {lat: number, lng: number}[]) => {
-      const L = (window as any).L;
+  // --- ROUTING CALCULATION ---
+  useEffect(() => {
       if (!mapRef.current) return;
+      const L = (window as any).L;
+      
+      // Cleanup previous control
+      if (routingControlRef.current) {
+          try { mapRef.current.removeControl(routingControlRef.current); } catch(e){}
+          routingControlRef.current = null;
+      }
+      
+      // Cleanup visual layers managed by us
+      markerLayersRef.current.forEach(m => m.remove());
+      markerLayersRef.current = [];
 
-      // 1. Clear old markers visual
-      waypointMarkersRef.current.forEach(m => m.remove());
-      waypointMarkersRef.current = [];
-      if (destMarkerRef.current) {
-          destMarkerRef.current.remove();
-          destMarkerRef.current = null;
+      if (waypoints.length === 0 || !userLocationRef.current) {
+          setRoutes([]);
+          return;
       }
 
-      // 2. Draw Markers
-      points.forEach((pt, index) => {
-          const letter = String.fromCharCode(65 + index);
+      const planPoints = [
+          L.latLng(userLocationRef.current.lat, userLocationRef.current.lng),
+          ...waypoints.map(w => L.latLng(w.lat, w.lng))
+      ];
+
+      let serviceUrl = 'https://router.project-osrm.org/route/v1';
+      let profile = 'car';
+      
+      if (transportMode === 'walking') {
+          serviceUrl = 'https://routing.openstreetmap.de/routed-foot/route/v1';
+          profile = 'driving'; 
+      } else if (transportMode === 'cycling') {
+          serviceUrl = 'https://routing.openstreetmap.de/routed-bike/route/v1';
+          profile = 'driving'; 
+      }
+
+      try {
+          const control = L.Routing.control({
+              waypoints: planPoints,
+              router: L.Routing.osrmv1({ serviceUrl, profile }),
+              // We hide the default lines (opacity 0) so we can draw our own custom ones
+              lineOptions: { styles: [{ color: 'transparent', opacity: 0 }] },
+              altLineOptions: { styles: [{ color: 'transparent', opacity: 0 }] },
+              show: false,
+              addWaypoints: false,
+              draggableWaypoints: false,
+              fitSelectedRoutes: false,
+              showAlternatives: true, // IMPORTANT: Enable multiple routes
+              createMarker: () => null 
+          }).addTo(mapRef.current);
+
+          control.on('routesfound', (e: any) => {
+              // Map all found routes to our state
+              const foundRoutes = e.routes.map((r: any, i: number) => ({
+                  id: i,
+                  summary: r.summary,
+                  coordinates: r.coordinates,
+                  instructions: r.instructions,
+                  waypoints: r.waypoints,
+                  waypointIndices: r.waypointIndices,
+                  routeObj: r
+              }));
+
+              setRoutes(foundRoutes);
+              drawCustomMarkers(planPoints);
+              
+              // Reset selection if out of bounds, otherwise keep current selection if possible
+              if (selectedRouteIndex >= foundRoutes.length) {
+                setSelectedRouteIndex(0);
+              }
+          });
+          
+          control.on('routingerror', (e: any) => {
+              console.warn("Routing Error:", e);
+              // setNotification({type: 'error', msg: "Nepavyko rasti maršruto"}); // Optional: noisy if it's just a temporary glitch
+          });
+
+          routingControlRef.current = control;
+
+      } catch (err) {
+          console.error("Routing Setup Error", err);
+      }
+  }, [waypoints, transportMode, userLocation?.lat, userLocation?.lng]);
+
+  // --- MAP DRAWING EFFECT ---
+  // This handles drawing the Blue/Grey lines based on selection
+  useEffect(() => {
+    if (!mapRef.current || routes.length === 0) {
+        // Clear if no routes
+        routePolylinesRef.current.forEach(l => mapRef.current.removeLayer(l));
+        routePolylinesRef.current = [];
+        segmentLayersRef.current.forEach(l => mapRef.current.removeLayer(l));
+        segmentLayersRef.current = [];
+        return;
+    }
+
+    const L = (window as any).L;
+
+    // 1. Clear old lines
+    routePolylinesRef.current.forEach(l => mapRef.current.removeLayer(l));
+    routePolylinesRef.current = [];
+    segmentLayersRef.current.forEach(l => mapRef.current.removeLayer(l));
+    segmentLayersRef.current = [];
+    if (highlightLayerRef.current) {
+        mapRef.current.removeLayer(highlightLayerRef.current);
+        highlightLayerRef.current = null;
+    }
+
+    // 2. Draw Routes (Alternatives first, then Active)
+    // We sort so active is last (on top)
+    const sortedRoutes = routes.map((r, i) => ({...r, originalIndex: i}))
+                               .sort((a, b) => (a.originalIndex === selectedRouteIndex ? 1 : -1));
+
+    sortedRoutes.forEach((route) => {
+        const isActive = route.originalIndex === selectedRouteIndex;
+
+        // Visual Polyline
+        const polyline = L.polyline(route.coordinates, {
+            color: isActive ? '#2563eb' : '#94a3b8', // Blue vs Slate-400
+            weight: isActive ? 7 : 5,
+            opacity: isActive ? 0.9 : 0.6,
+            lineCap: 'round',
+            lineJoin: 'round',
+            zIndexOffset: isActive ? 100 : 10
+        }).addTo(mapRef.current);
+        
+        if (isActive) {
+            polyline.bringToFront();
+            // Create interactive click zones only for active route
+            createInteractiveSegments(route);
+            
+            // Update stats for the active route
+            if (!isNavigatingRef.current) {
+                setNavStats({
+                    speed: 0,
+                    distanceRem: route.summary.totalDistance,
+                    timeRem: route.summary.totalTime
+                });
+            }
+        } else {
+            // Click alternative to select it
+            polyline.on('click', () => setSelectedRouteIndex(route.originalIndex));
+        }
+
+        routePolylinesRef.current.push(polyline);
+    });
+
+  }, [routes, selectedRouteIndex]);
+
+
+  const drawCustomMarkers = (latLngs: any[]) => {
+      const L = (window as any).L;
+      latLngs.forEach((latLng, i) => {
+          if (i === 0) return; 
+          
+          const waypointIndex = i - 1;
+          const letter = String.fromCharCode(65 + waypointIndex);
+          
           const icon = L.divIcon({
               className: 'bg-transparent',
-              html: `<div class="relative">
-                        <div class="w-6 h-6 bg-slate-800 text-white rounded-full flex items-center justify-center text-xs font-bold border-2 border-white shadow-md -translate-x-1/2 -translate-y-1/2 transform active:scale-110 transition-transform">
-                            ${letter}
-                        </div>
+              html: `<div class="relative w-8 h-8 flex items-center justify-center transform hover:scale-110 transition-transform cursor-pointer">
+                        <div class="absolute inset-0 bg-slate-900 rounded-full border-2 border-white shadow-lg"></div>
+                        <span class="relative text-white font-bold text-sm">${letter}</span>
                      </div>`,
-              iconSize: [0, 0]
+              iconSize: [32, 32],
+              iconAnchor: [16, 32]
           });
-          const marker = L.marker([pt.lat, pt.lng], { icon, draggable: true }).addTo(mapRef.current);
+
+          const marker = L.marker(latLng, { icon, draggable: true }).addTo(mapRef.current);
           
           marker.on('dragend', (e: any) => {
               const newPos = e.target.getLatLng();
-              setWaypoints(current => {
-                  const updated = [...current];
-                  updated[index] = { lat: newPos.lat, lng: newPos.lng };
+              setWaypoints(prev => {
+                  const updated = [...prev];
+                  updated[waypointIndex] = { lat: newPos.lat, lng: newPos.lng };
                   return updated;
               });
           });
 
-          waypointMarkersRef.current.push(marker);
+          markerLayersRef.current.push(marker);
       });
-
-      // 3. Trigger Route Calculation
-      if (points.length === 0) {
-          cleanupRouting();
-          return;
-      }
-
-      if (!userLocationRef.current) {
-          setNotification({type: 'error', msg: 'Spustelėkite žemėlapį, kad nustatytumėte savo vietą'});
-          return;
-      }
-
-      const routePoints = [userLocationRef.current, ...points];
-      executeRouteCreation(routePoints);
   };
 
-  useEffect(() => {
-      if (waypoints.length > 0) {
-          updateRoute(waypoints);
-      } else {
-          cleanupRouting();
-          waypointMarkersRef.current.forEach(m => m.remove());
-          waypointMarkersRef.current = [];
-          if (destMarkerRef.current) {
-              destMarkerRef.current.remove();
-              destMarkerRef.current = null;
-          }
-      }
-  }, [waypoints, transportMode]);
+  const createInteractiveSegments = (route: RouteInfo) => {
+      const L = (window as any).L;
+      if (!mapRef.current || !route.waypointIndices) return;
 
+      for (let i = 0; i < route.waypointIndices.length - 1; i++) {
+          const startIndex = route.waypointIndices[i];
+          const endIndex = route.waypointIndices[i+1];
+          const segmentCoords = route.coordinates.slice(startIndex, endIndex + 1);
+          
+          if (segmentCoords.length < 2) continue;
 
-  // --- GPS LOGIC ---
-  const startGpsTracking = () => {
-    if (!navigator.geolocation) return;
-    setIsLocating(true);
+          // 50px Click Zone - FORCE TO FRONT
+          const hitLayer = L.polyline(segmentCoords, {
+              color: '#ffffff', // White
+              weight: 50, 
+              opacity: 0.01, // Almost invisible but registered
+              zIndexOffset: 1000,
+              bubblingMouseEvents: false, 
+              interactive: true
+          }).addTo(mapRef.current);
+          
+          // Force click layer to front
+          hitLayer.bringToFront();
 
-    if (gpsWatchId.current) navigator.geolocation.clearWatch(gpsWatchId.current);
+          const dist = calculateDistance(segmentCoords);
+          const time = (dist / 1000) / (transportMode === 'driving' ? 50 : 5) * 60; 
 
-    const onGeoSuccess = (pos: GeolocationPosition) => {
-        const { latitude, longitude, accuracy } = pos.coords;
-        const newLoc = { lat: latitude, lng: longitude, accuracy };
-        
-        setUserLocation(newLoc);
-        setIsLocating(false);
-        updateUserMarker(latitude, longitude, accuracy);
+          const startLabel = i === 0 ? "Jūsų vieta" : `Taškas ${String.fromCharCode(64 + i)}`;
+          const endLabel = `Taškas ${String.fromCharCode(65 + i)}`;
 
-        if (isFollowingUser && mapRef.current) {
-            mapRef.current.panTo([latitude, longitude], { animate: true });
-        }
-    };
+          hitLayer.on('click', (e: any) => {
+              L.DomEvent.stopPropagation(e);
+              
+              if (highlightLayerRef.current) {
+                  mapRef.current.removeLayer(highlightLayerRef.current);
+              }
 
-    const onGeoError = (err: any) => {
-        setIsLocating(false);
-    };
+              const highlight = L.polyline(segmentCoords, {
+                  color: '#f97316', // Orange highlight
+                  weight: 8,
+                  opacity: 0.9,
+                  lineCap: 'round',
+                  interactive: false
+              }).addTo(mapRef.current);
+              highlight.bringToFront();
+              
+              highlightLayerRef.current = highlight;
 
-    navigator.geolocation.getCurrentPosition(onGeoSuccess, onGeoError, { enableHighAccuracy: true });
-    gpsWatchId.current = navigator.geolocation.watchPosition(onGeoSuccess, onGeoError, { 
-        enableHighAccuracy: true, 
-        timeout: 20000 
-    });
-  };
+              L.popup()
+                .setLatLng(e.latlng)
+                .setContent(`
+                     <div class="text-center font-sans min-w-[100px]">
+                        <div class="font-bold text-[9px] text-slate-400 uppercase tracking-wide mb-0.5">${startLabel} ➔ ${endLabel}</div>
+                        <div class="text-lg font-black text-slate-800">${formatDist(dist)}</div>
+                        <div class="text-xs text-blue-600 font-bold">~${Math.round(time)} min</div>
+                     </div>
+                `)
+                .openOn(mapRef.current);
+          });
 
-  const updateUserMarker = (lat: number, lng: number, accuracy: number) => {
-    const L = (window as any).L;
-    if (!mapRef.current || !L) return;
-
-    if (userMarkerRef.current) {
-      userMarkerRef.current.setLatLng([lat, lng]);
-    } else {
-      const userIcon = L.divIcon({
-        className: 'bg-transparent',
-        html: `
-          <div class="relative flex h-4 w-4 -translate-x-1/2 -translate-y-1/2">
-            <span class="absolute inline-flex h-full w-full rounded-full bg-blue-500 border-2 border-white shadow-sm"></span>
-            <span class="relative inline-flex rounded-full h-4 w-4 bg-blue-600"></span>
-          </div>`,
-        iconSize: [0, 0]
-      });
-      userMarkerRef.current = L.marker([lat, lng], { icon: userIcon, zIndexOffset: 1000 }).addTo(mapRef.current);
-    }
-
-    if (accuracyCircleRef.current) {
-        accuracyCircleRef.current.setLatLng([lat, lng]);
-        accuracyCircleRef.current.setRadius(accuracy);
-    } else {
-        accuracyCircleRef.current = L.circle([lat, lng], {
-            radius: accuracy,
-            color: '#3b82f6',
-            fillColor: '#3b82f6',
-            fillOpacity: 0.1,
-            weight: 0,
-        }).addTo(mapRef.current);
-    }
-  };
-
-  const reCenterMap = () => {
-      if (userLocation && mapRef.current) {
-          mapRef.current.setView([userLocation.lat, userLocation.lng], 16, { animate: true });
-          setIsFollowingUser(true);
-      } else {
-          setNotification({type:'info', msg:'Nustatoma vieta...'});
-          startGpsTracking();
+          segmentLayersRef.current.push(hitLayer);
       }
   };
 
-  // --- ROUTING ENGINE ---
-  const cleanupRouting = () => {
-      if (routingControlRef.current && mapRef.current) {
-          try { mapRef.current.removeControl(routingControlRef.current); } catch(e) {}
-          routingControlRef.current = null;
+  const calculateDistance = (coords: any[]) => {
+      const L = (window as any).L;
+      let d = 0;
+      for(let i=0; i<coords.length-1; i++) {
+          d += L.latLng(coords[i]).distanceTo(L.latLng(coords[i+1]));
       }
-      if (fallbackPolylineRef.current) fallbackPolylineRef.current.remove();
-      setRoutes([]);
+      return d;
   };
 
-  const executeRouteCreation = (points: {lat: number, lng: number}[]) => {
-    const L = (window as any).L;
-    if (!mapRef.current || !L.Routing) return;
-
-    setIsCalculatingRoute(true);
-    cleanupRouting(); 
-
-    // OSRM DE Mirrors
-    let serviceUrl = 'https://router.project-osrm.org/route/v1';
-    let profile = 'car';
-
-    if (transportMode === 'walking') {
-        serviceUrl = 'https://routing.openstreetmap.de/routed-foot/route/v1';
-        profile = 'driving'; 
-    } else if (transportMode === 'cycling') {
-        serviceUrl = 'https://routing.openstreetmap.de/routed-bike/route/v1';
-        profile = 'driving';
-    }
-
-    const waypoints = points.map(p => L.latLng(p.lat, p.lng));
-
-    try {
-        const control = L.Routing.control({
-          waypoints: waypoints,
-          router: L.Routing.osrmv1({ 
-              serviceUrl: serviceUrl,
-              profile: profile 
-          }),
-          lineOptions: { 
-              styles: [{ color: '#2563eb', opacity: 0.8, weight: 6 }] 
-          },
-          altLineOptions: {
-              styles: [{ color: '#94a3b8', opacity: 0.6, weight: 6 }]
-          },
-          showAlternatives: true,
-          show: false, // Hides the itinerary container
-          addWaypoints: false,
-          draggableWaypoints: false,
-          fitSelectedRoutes: false,
-          createMarker: () => null 
-        }).addTo(mapRef.current);
-
-        control.on('routesfound', (e: any) => {
-            setIsCalculatingRoute(false);
-            const foundRoutes = e.routes.map((r: any, i: number) => ({
-                id: i,
-                summary: r.summary,
-                coordinates: r.coordinates,
-                name: i === 0 ? "Greičiausias" : `Alternatyva ${i}`,
-                isSelected: i === 0,
-                isDirect: false,
-                routeObj: r
-            }));
-            setRoutes(foundRoutes);
-        });
-        
-        control.on('routeselected', (e: any) => {
-            const selectedRoute = e.route;
-            setRoutes(prev => prev.map((r, i) => {
-                const match = Math.abs(r.summary.totalDistance - selectedRoute.summary.totalDistance) < 1; 
-                return { ...r, isSelected: match };
-            }));
-        });
-
-        control.on('routingerror', () => {
-            console.warn("Routing failed.");
-            setNotification({type: 'info', msg: 'Maršrutas nerastas. Rodomas tiesus atstumas.'});
-            if(points.length >= 2) drawDirectFallback(points[0], points[points.length-1]);
-        });
-
-        routingControlRef.current = control;
-
-    } catch (err) {
-        console.error("Routing error", err);
-    }
+  const startNavigation = () => {
+      if (routes.length === 0) return;
+      setViewMode('navigation');
+      if (mapRef.current && userLocation) {
+          mapRef.current.setZoom(18);
+          mapRef.current.panTo([userLocation.lat, userLocation.lng], { animate: true });
+      }
   };
 
-  // Manually Select Route -> Sync with Map
-  const selectRoute = (index: number) => {
-      if (!routingControlRef.current) return;
+  const stopNavigation = () => {
+      setViewMode('map');
+      if (mapRef.current) mapRef.current.setZoom(15);
+  };
+
+  // --- MATH ---
+  const getDistanceFromLatLonInM = (lat1: number, lon1: number, lat2: number, lon2: number) => {
+    const R = 6371000; 
+    const dLat = (lat2 - lat1) * (Math.PI / 180);
+    const dLon = (lon2 - lon1) * (Math.PI / 180);
+    const a =
+      Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+      Math.cos(lat1 * (Math.PI / 180)) * Math.cos(lat2 * (Math.PI / 180)) *
+      Math.sin(dLon / 2) * Math.sin(dLon / 2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    return R * c; 
+  };
+
+  const getSegmentDistance = (index: number) => {
+      if (routes.length === 0) return 0;
+      // Use selected Route
+      const r = routes[selectedRouteIndex];
+      if (!r || !r.waypointIndices || r.waypointIndices.length <= index + 1) return 0;
       
-      const selectedRouteInfo = routes[index];
-      if (!selectedRouteInfo) return;
-
-      setRoutes(prev => prev.map((r, i) => ({ ...r, isSelected: i === index })));
-
-      if (selectedRouteInfo.routeObj) {
-          try {
-             // Wrap in try-catch to prevent classList error if container is hidden
-             routingControlRef.current.fire('routeselected', { route: selectedRouteInfo.routeObj });
-          } catch (e) {
-             // Ignore visual update errors in headless mode
-          }
-      }
+      const startI = r.waypointIndices[index];
+      const endI = r.waypointIndices[index+1];
+      const coords = r.coordinates.slice(startI, endI + 1);
+      return calculateDistance(coords);
   };
 
-  const drawDirectFallback = (start: any, dest: any) => {
-     const L = (window as any).L;
-     if (!mapRef.current) return;
-     const startLatLng = L.latLng(start.lat, start.lng);
-     const destLatLng = L.latLng(dest.lat, dest.lng);
-     const dist = startLatLng.distanceTo(destLatLng);
-     const speed = transportMode === 'driving' ? 50 : 5; 
-     const time = (dist / 1000) / speed * 3600;
-
-     const polyline = L.polyline([startLatLng, destLatLng], {
-         color: '#64748b', weight: 4, dashArray: '10, 10', opacity: 0.7
-     }).addTo(mapRef.current);
-     
-     fallbackPolylineRef.current = polyline;
-     setRoutes([{
-         id: 999,
-         summary: { totalDistance: dist, totalTime: time },
-         coordinates: [],
-         name: "Tiesus",
-         isSelected: true,
-         isDirect: true
-     }]);
-     setIsCalculatingRoute(false);
-  };
-
-  // --- UI HELPERS ---
   const formatTime = (s: number) => {
-      const min = Math.round(s / 60);
-      if (min > 60) {
-          const h = Math.floor(min/60);
-          const m = min%60;
-          return `${h} val ${m} min`;
-      }
-      return `${min} min`;
+      const h = Math.floor(s / 3600);
+      const m = Math.round((s % 3600) / 60);
+      if (h > 0) return `${h} val ${m} min`;
+      return `${m} min`;
   };
 
   const formatDist = (meters: number) => {
-      if (meters > 1000) return `${(meters/1000).toFixed(1)} km`;
+      if (meters >= 1000) return `${(meters/1000).toFixed(1)} km`;
       return `${Math.round(meters)} m`;
   };
 
   return (
     <div className="w-full h-screen overflow-hidden bg-slate-50 font-sans touch-none select-none text-slate-900">
       <Head>
-        <title>TapuTapu</title>
-        <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+        <title>TapuTapu v10.3</title>
       </Head>
 
-      {/* Notification */}
+      {/* Notification Toast */}
       {notification && (
-        <div className="absolute top-24 left-1/2 -translate-x-1/2 z-[3000] bg-slate-800/90 backdrop-blur text-white px-4 py-2 rounded-full shadow-lg text-xs font-medium animate-fade-in pointer-events-none">
+        <div className="absolute top-24 left-1/2 -translate-x-1/2 z-[3000] bg-slate-800/95 text-white px-5 py-2.5 rounded-full shadow-xl text-sm font-medium animate-fade-in pointer-events-none whitespace-nowrap">
             {notification.msg}
         </div>
       )}
 
-      {/* MAP - ALWAYS RENDERED (Removed hidden class) */}
-      <div 
-        ref={mapContainerRef} 
-        className="absolute inset-0 z-0"
-      />
+      {/* MAP LAYER */}
+      <div ref={mapContainerRef} className="absolute inset-0 z-0" />
 
       {/* LANDING PAGE - OVERLAY Z-50 */}
       {viewMode === 'landing' && (
@@ -496,8 +604,8 @@ export default function MapPage() {
                        🌲
                    </div>
                    <h1 className="text-5xl font-black text-white drop-shadow-md tracking-tight">TapuTapu</h1>
-                   <div className="text-white/80 font-mono text-xs mt-1 bg-black/10 px-2 py-0.5 rounded">v5.1</div>
-                   <p className="text-white/90 text-sm font-bold tracking-widest mt-2 uppercase">Saugi kelionė visiems</p>
+                   <div className="text-white/80 font-mono text-xs mt-1 bg-black/10 px-2 py-0.5 rounded">v10.3</div>
+                   <p className="text-white/90 text-sm font-bold tracking-widest mt-2 uppercase">Atraskime kartu!</p>
                </div>
                
                <div className="w-full space-y-4">
@@ -509,14 +617,6 @@ export default function MapPage() {
                      Kur aš esu?
                    </button>
                    
-                   <button 
-                     onClick={() => router.push('/trails')}
-                     className="w-full py-5 bg-emerald-600 text-white rounded-2xl font-black text-xl shadow-xl shadow-emerald-500/20 active:scale-95 transition-transform flex items-center justify-center gap-4 hover:emerald-700 group"
-                   >
-                     <span className="text-2xl group-hover:rotate-12 transition-transform">🏔️</span>
-                     AI Trail Finder
-                   </button>
-
                    <button 
                      onClick={() => setViewMode('lost')}
                      className="w-full py-5 bg-gradient-to-r from-orange-500 to-red-500 text-white rounded-2xl font-black text-xl shadow-xl shadow-orange-500/40 active:scale-95 transition-transform flex items-center justify-center gap-4 hover:brightness-110 group"
@@ -533,13 +633,13 @@ export default function MapPage() {
         </div>
       )}
 
-      {/* MAP CONTROLS - Z-10 */}
+      {/* --- UI OVERLAYS (Only visible in MAP mode) --- */}
       {viewMode === 'map' && (
         <>
-            {/* Top Bar */}
-            <div className="absolute top-4 left-0 right-0 z-[1000] flex justify-center pointer-events-none">
-                <div className="pointer-events-auto bg-white/90 backdrop-blur shadow-sm border border-slate-100 p-1 rounded-full flex gap-1">
-                   <button onClick={() => setViewMode('landing')} className="p-2 rounded-full hover:bg-slate-50 text-slate-400">
+            {/* Top Bar: Transport Modes */}
+            <div className="absolute top-4 left-4 right-4 z-[1000] flex justify-center pointer-events-none">
+                <div className="pointer-events-auto bg-white/90 backdrop-blur shadow-md rounded-full p-1 flex gap-1 border border-slate-100">
+                   <button onClick={() => setViewMode('landing')} className="w-10 h-10 rounded-full flex items-center justify-center hover:bg-slate-50 text-slate-400">
                       <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" /></svg>
                    </button>
                    <div className="w-px bg-slate-200 mx-1 my-1"></div>
@@ -547,7 +647,7 @@ export default function MapPage() {
                        <button
                          key={m}
                          onClick={() => setTransportMode(m as TransportMode)}
-                         className={`p-2 rounded-full transition-all ${transportMode === m ? 'bg-slate-800 text-white' : 'text-slate-400 hover:bg-slate-50'}`}
+                         className={`w-10 h-10 rounded-full flex items-center justify-center transition-all ${transportMode === m ? 'bg-slate-800 text-white' : 'text-slate-400 hover:bg-slate-50'}`}
                        >
                          {m === 'walking' ? '🚶' : m === 'cycling' ? '🚴' : '🚗'}
                        </button>
@@ -555,103 +655,105 @@ export default function MapPage() {
                 </div>
             </div>
 
-            {/* Right Side Controls */}
+            {/* Right Control Bar */}
             <div className="absolute top-20 right-4 z-[1000] flex flex-col gap-3">
-                 {/* Builder Toggle */}
+                {/* 1. BUILDER TOGGLE */}
                 <button 
-                    onClick={() => {
-                        const nextState = !isBuilderMode;
-                        setIsBuilderMode(nextState);
-                        setNotification({type: 'info', msg: nextState ? 'Maršruto kūrimo režimas' : 'Žymėjimas baigtas'});
-                    }}
-                    className={`p-3 rounded-full shadow-lg transition-all active:scale-90 ${isBuilderMode ? 'bg-emerald-500 text-white ring-4 ring-emerald-200' : 'bg-white text-slate-600'}`}
+                  onClick={() => {
+                      const newState = !isBuilderMode;
+                      setIsBuilderMode(newState);
+                      setNotification({type: 'info', msg: newState ? 'Paspauskite žemėlapį, kad pridėtumėte tašką' : 'Maršrutas užrakintas'});
+                  }} 
+                  className={`w-12 h-12 rounded-full shadow-lg flex items-center justify-center transition-all border-2 ${isBuilderMode ? 'bg-emerald-500 text-white border-emerald-600' : 'bg-white text-slate-600 border-white'}`}
                 >
-                    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-                        {isBuilderMode ? (
-                             <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-                        ) : (
-                             <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
-                        )}
-                    </svg>
+                  <span className="text-2xl font-bold">{isBuilderMode ? '✓' : '+'}</span>
                 </button>
 
-                {/* Undo Button */}
+                {/* 2. UNDO */}
                 {isBuilderMode && waypoints.length > 0 && (
                     <button 
                         onClick={undoLastWaypoint}
-                        className="p-3 bg-white text-slate-600 rounded-full shadow-lg active:scale-90"
+                        className="w-12 h-12 bg-white rounded-full shadow-lg flex items-center justify-center text-slate-600 active:scale-95"
                     >
-                        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6" />
-                        </svg>
+                        <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6" /></svg>
                     </button>
                 )}
-
-                {/* Recenter */}
+                
+                {/* 3. RECENTER */}
                 <button 
                     onClick={reCenterMap}
-                    className={`p-3 rounded-full shadow-lg transition-all active:scale-90 ${isFollowingUser ? 'bg-blue-500 text-white' : 'bg-white text-slate-600'}`}
+                    className="w-12 h-12 bg-white rounded-full shadow-lg flex items-center justify-center text-blue-600"
                 >
-                    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
-                    </svg>
+                    <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
+                </button>
+
+                {/* 4. SOS */}
+                <button 
+                    onClick={() => setViewMode('lost')}
+                    className="w-12 h-12 bg-rose-500 rounded-full shadow-lg flex items-center justify-center text-white animate-pulse"
+                >
+                    <span className="text-xs font-bold">SOS</span>
                 </button>
             </div>
 
-            {/* BOTTOM INFO (Selectable Cards) */}
+            {/* Bottom Route Info Pill */}
             {routes.length > 0 && (
-                <div className="absolute bottom-8 left-0 right-0 z-[1000] flex justify-center pointer-events-none">
-                    <div className="pointer-events-auto flex flex-col gap-2 items-center max-w-[95%]">
-                        
-                        {/* Alternative Routes Tabs */}
-                        {routes.length > 1 && (
-                            <div className="flex gap-2 overflow-x-auto pb-1 w-full justify-center px-4">
-                                {routes.map((route, idx) => (
-                                    <button
-                                        key={idx}
-                                        onClick={() => selectRoute(idx)}
-                                        className={`px-4 py-1.5 rounded-full text-xs font-bold shadow-sm transition-all whitespace-nowrap border
-                                            ${route.isSelected 
-                                                ? 'bg-blue-600 text-white border-blue-600' 
-                                                : 'bg-white text-slate-500 border-slate-200 hover:bg-slate-50'}`}
-                                    >
-                                        {formatTime(route.summary.totalTime)}
-                                    </button>
+                <div className="absolute bottom-6 left-4 right-4 z-[1000] pointer-events-none flex flex-col items-center gap-2">
+                    
+                    {/* Route Selection Toggles - COMPACT */}
+                    {routes.length > 1 && (
+                        <div className="pointer-events-auto flex gap-2 mb-1 overflow-x-auto p-1 max-w-full">
+                            {routes.map((r, idx) => (
+                                <button
+                                    key={idx}
+                                    onClick={() => setSelectedRouteIndex(idx)}
+                                    className={`px-3 py-1.5 rounded-full text-xs font-bold shadow-md transition-all whitespace-nowrap ${
+                                        selectedRouteIndex === idx 
+                                        ? 'bg-blue-600 text-white ring-2 ring-blue-300' 
+                                        : 'bg-white text-slate-600 hover:bg-slate-50'
+                                    }`}
+                                >
+                                    {formatTime(r.summary.totalTime)}
+                                </button>
+                            ))}
+                        </div>
+                    )}
+
+                    {/* Segments (Collapsible) - COMPACT */}
+                    {showSegments && (
+                        <div className="pointer-events-auto w-full max-w-sm bg-white/95 backdrop-blur rounded-xl p-3 shadow-xl border border-slate-200 mb-1 max-h-40 overflow-y-auto">
+                            <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2">Maršruto Atkarpos</h4>
+                            <div className="text-xs text-slate-600 space-y-1">
+                                {waypoints.map((wp, i) => (
+                                    <div key={i} className="flex justify-between border-b border-slate-100 pb-1">
+                                        <span>{i === 0 ? "Nuo Jūsų" : `Taškas ${String.fromCharCode(64 + i)}`} → {String.fromCharCode(65 + i)}</span>
+                                        <span className="font-mono font-bold">{formatDist(getSegmentDistance(i))}</span>
+                                    </div>
                                 ))}
                             </div>
-                        )}
+                        </div>
+                    )}
 
-                        {/* Main Pill Info */}
-                        <div className="bg-white/95 backdrop-blur shadow-lg border border-slate-100 rounded-full pl-6 pr-2 py-2 flex items-center gap-4 animate-slide-up">
-                             {/* Route Details */}
-                            <div className="flex flex-col min-w-[80px]">
-                                {routes.find(r => r.isSelected) && (
-                                    <div className="flex items-baseline gap-2">
-                                        <span className="text-lg font-bold text-slate-800">
-                                            {formatTime(routes.find(r => r.isSelected)!.summary.totalTime)}
-                                        </span>
-                                        <span className="text-xs text-slate-500 font-medium">
-                                            ({formatDist(routes.find(r => r.isSelected)!.summary.totalDistance)})
-                                        </span>
-                                    </div>
-                                )}
+                    {/* Main Pill - COMPACT */}
+                    <div className="pointer-events-auto w-full max-w-sm bg-white rounded-xl p-3 shadow-2xl flex items-center justify-between border border-slate-100">
+                        <div onClick={() => setShowSegments(!showSegments)} className="flex flex-col cursor-pointer active:opacity-70 transition-opacity">
+                            <div className="flex items-baseline gap-1">
+                                <span className="text-2xl font-black text-slate-800">{formatTime(routes[selectedRouteIndex]?.summary.totalTime || 0)}</span>
+                                <span className="text-xs font-medium text-slate-500">({formatDist(routes[selectedRouteIndex]?.summary.totalDistance || 0)})</span>
                             </div>
-
-                            {/* Action Buttons */}
-                            <div className="flex items-center gap-2">
-                                <button 
-                                    onClick={() => { clearWaypoints(); setIsBuilderMode(false); }}
-                                    className="w-8 h-8 flex items-center justify-center rounded-full bg-slate-100 text-slate-400 hover:bg-slate-200 transition-colors"
-                                >
-                                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
-                                </button>
-                                
-                                <button className="h-9 px-5 bg-blue-600 hover:bg-blue-700 text-white rounded-full font-bold text-sm shadow-md active:scale-95 transition-transform flex items-center gap-1.5">
-                                    <span>Vykstame</span>
-                                    <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}><path strokeLinecap="round" strokeLinejoin="round" d="M13 7l5 5m0 0l-5 5m5-5H6" /></svg>
-                                </button>
+                            <div className="text-[10px] text-blue-600 font-bold flex items-center gap-1">
+                                {waypoints.length} taškai (Išskleisti)
                             </div>
+                        </div>
+                        
+                        <div className="flex gap-2">
+                            <button onClick={() => { setWaypoints([]); setRoutes([]); }} className="w-10 h-10 rounded-full bg-slate-100 text-slate-400 flex items-center justify-center hover:bg-slate-200">
+                                ✕
+                            </button>
+                            <button onClick={startNavigation} className="h-10 px-6 bg-blue-600 text-white rounded-full font-bold shadow-lg shadow-blue-200 active:scale-95 transition-transform flex items-center gap-2">
+                                <span>Vykstame</span>
+                                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}><path strokeLinecap="round" strokeLinejoin="round" d="M13 7l5 5m0 0l-5 5m5-5H6" /></svg>
+                            </button>
                         </div>
                     </div>
                 </div>
@@ -659,9 +761,43 @@ export default function MapPage() {
         </>
       )}
 
-      {/* LOST VIEW - OVERLAY Z-60 */}
+      {/* --- NAVIGATION MODE --- */}
+      {viewMode === 'navigation' && (
+          <>
+            <div className="absolute top-0 left-0 right-0 bg-slate-900 text-white p-4 pt- safe z-[1000] flex justify-between items-start shadow-xl">
+                 <div className="flex flex-col">
+                     <span className="text-xs text-slate-400 uppercase tracking-wider font-bold">Kitas posūkis</span>
+                     <span className="text-2xl font-bold flex items-center gap-2">
+                         ⬆️ {formatDist(navStats.distanceRem > 100 ? 100 : navStats.distanceRem)}
+                     </span>
+                 </div>
+                 <button onClick={stopNavigation} className="bg-slate-800 text-white px-3 py-1 rounded text-xs font-bold border border-slate-700">
+                     Baigti
+                 </button>
+            </div>
+
+            <div className="absolute bottom-0 left-0 right-0 bg-white p-6 pb-safe z-[1000] rounded-t-3xl shadow-[0_-10px_40px_rgba(0,0,0,0.1)]">
+                 <div className="grid grid-cols-3 gap-4 text-center">
+                     <div className="flex flex-col">
+                         <span className="text-3xl font-black text-slate-800">{navStats.speed}</span>
+                         <span className="text-[10px] text-slate-400 uppercase font-bold tracking-wider">km/h</span>
+                     </div>
+                     <div className="flex flex-col border-x border-slate-100">
+                         <span className="text-3xl font-black text-slate-800">{formatTime(navStats.timeRem)}</span>
+                         <span className="text-[10px] text-slate-400 uppercase font-bold tracking-wider">Liko</span>
+                     </div>
+                     <div className="flex flex-col">
+                         <span className="text-3xl font-black text-slate-800">{(navStats.distanceRem / 1000).toFixed(1)}</span>
+                         <span className="text-[10px] text-slate-400 uppercase font-bold tracking-wider">km</span>
+                     </div>
+                 </div>
+            </div>
+          </>
+      )}
+
+      {/* --- LOST MODE --- */}
       {viewMode === 'lost' && (
-        <div className="absolute inset-0 z-[60] bg-white/50 backdrop-blur-sm flex items-end justify-center pb-6 px-4 animate-fade-in">
+        <div className="absolute inset-0 z-[2000]">
             <LostView lat={userLocation?.lat || 0} lng={userLocation?.lng || 0} onClose={() => setViewMode('landing')} />
         </div>
       )}
