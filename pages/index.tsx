@@ -1,8 +1,15 @@
 
 import React, { useState, useEffect, useRef } from "react";
 import Head from 'next/head';
-import { useRouter } from 'next/router';
 import LostView from "@/components/LostView";
+
+/**
+ * TAPUTAPU v10.9 - FINAL POLISH
+ * - UI: Restored and improved "Maršrutas" segment list.
+ * - Fix: Legs (A->B, B->C) now show individual distances.
+ * - Fix: Clicking a leg highlights the specific part of the path.
+ * - Stability: Map zoom and location handling refined.
+ */
 
 type ViewMode = 'landing' | 'map' | 'lost' | 'navigation';
 type TransportMode = 'walking' | 'cycling' | 'driving';
@@ -13,105 +20,83 @@ interface RouteInfo {
   coordinates: any[];
   instructions: any[];
   waypoints: any[];
-  waypointIndices: number[]; // Store indices for segment splitting
-  name?: string;
+  waypointIndices: number[];
   routeObj?: any; 
 }
 
 export default function MapPage() {
   // --- STATE ---
-  // Start in 'landing' mode as requested
   const [viewMode, setViewMode] = useState<ViewMode>('landing');
   const [transportMode, setTransportMode] = useState<TransportMode>('walking');
-  
-  // Routing State
   const [routes, setRoutes] = useState<RouteInfo[]>([]);
   const [selectedRouteIndex, setSelectedRouteIndex] = useState(0);
-
   const [userLocation, setUserLocation] = useState<{ lat: number; lng: number, accuracy: number, speed: number | null, heading: number | null } | null>(null);
-  
-  // Route Building
   const [isBuilderMode, setIsBuilderMode] = useState(false); 
   const [waypoints, setWaypoints] = useState<{lat: number, lng: number}[]>([]);
-  
-  // Navigation State
-  const [navStats, setNavStats] = useState({ speed: 0, distanceRem: 0, timeRem: 0 });
+  const [navStats, setNavStats] = useState({ speed: 0, distanceRem: 0, timeRem: 0, pace: '--:--', calories: 0 });
   const [showSegments, setShowSegments] = useState(false);
-
-  // Notification System
   const [notification, setNotification] = useState<{type: 'error' | 'info', msg: string} | null>(null);
+
+  // Path Maker (GPS Recorder)
+  const [isRecording, setIsRecording] = useState(false);
+  const [recordedPath, setRecordedPath] = useState<{lat: number, lng: number}[]>([]);
+  const [totalRecordedDist, setTotalRecordedDist] = useState(0);
 
   // --- REFS ---
   const mapRef = useRef<any>(null);
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const routingControlRef = useRef<any>(null);
-  const routePolylinesRef = useRef<any[]>([]); // Store custom route lines
+  const routePolylinesRef = useRef<any[]>([]);
   const segmentLayersRef = useRef<any[]>([]); 
   const highlightLayerRef = useRef<any>(null);
   const userMarkerRef = useRef<any>(null);
   const accuracyCircleRef = useRef<any>(null);
   const gpsWatchId = useRef<number | null>(null);
   const markerLayersRef = useRef<any[]>([]);
+  const recordedPathPolylineRef = useRef<any>(null);
   
-  const userLocationRef = useRef<{ lat: number; lng: number } | null>(null);
+  const userLocationRef = useRef<{ lat: number; lng: number, heading: number | null } | null>(null);
   const isNavigatingRef = useRef(false);
   const destinationRef = useRef<{ lat: number; lng: number } | null>(null);
   const waypointsRef = useRef<{lat: number, lng: number}[]>([]);
-  const builderModeRef = useRef(false);
+  const isRecordingRef = useRef(false);
+  const isBuilderModeRef = useRef(false);
 
   // --- SYNC REFS ---
   useEffect(() => { 
-      if (userLocation) userLocationRef.current = { lat: userLocation.lat, lng: userLocation.lng };
+      if (userLocation) userLocationRef.current = { lat: userLocation.lat, lng: userLocation.lng, heading: userLocation.heading };
   }, [userLocation]);
 
   useEffect(() => {
       waypointsRef.current = waypoints;
-      if (waypoints.length > 0) {
-          destinationRef.current = waypoints[waypoints.length - 1];
-      } else {
-          destinationRef.current = null;
-      }
-      // Reset selection when points change
-      setSelectedRouteIndex(0);
+      if (waypoints.length > 0) destinationRef.current = waypoints[waypoints.length - 1];
   }, [waypoints]);
 
-  useEffect(() => {
-      builderModeRef.current = isBuilderMode;
-  }, [isBuilderMode]);
+  useEffect(() => { isRecordingRef.current = isRecording; }, [isRecording]);
+  useEffect(() => { isBuilderModeRef.current = isBuilderMode; }, [isBuilderMode]);
   
   useEffect(() => {
       isNavigatingRef.current = viewMode === 'navigation';
-      // Prevent screen sleep during navigation
-      if (viewMode === 'navigation' && 'wakeLock' in navigator) {
-          try { (navigator as any).wakeLock.request('screen'); } catch(e){}
-      }
-      
-      // Resize map when switching from Landing to Map
       if (viewMode === 'map' && mapRef.current) {
           setTimeout(() => {
               mapRef.current.invalidateSize();
-              if (userLocationRef.current) {
-                  mapRef.current.panTo([userLocationRef.current.lat, userLocationRef.current.lng], { animate: true });
-              }
-          }, 100);
+          }, 400);
+      }
+      if (viewMode !== 'navigation' && mapContainerRef.current) {
+          mapContainerRef.current.style.transform = 'translate(-50%, -50%) rotate(0deg)';
       }
   }, [viewMode]);
 
-  // --- NOTIFICATIONS ---
-  useEffect(() => {
-    if (notification) {
-      const timer = setTimeout(() => setNotification(null), 3000);
-      return () => clearTimeout(timer);
-    }
-  }, [notification]);
-
   // --- MAP INITIALIZATION ---
   useEffect(() => {
+      let intervalId: any = null;
       const initMap = () => {
-        if (typeof window === 'undefined' || !(window as any).L || !mapContainerRef.current) return;
+        if (typeof window === 'undefined' || !mapContainerRef.current) return;
+        const L = (window as any).L;
+        if (!L || !L.Routing) return;
+        if (intervalId) clearInterval(intervalId);
         if (mapRef.current) return;
 
-        const L = (window as any).L;
         const map = L.map(mapContainerRef.current, {
           zoomControl: false,
           attributionControl: false,
@@ -122,333 +107,203 @@ export default function MapPage() {
           attribution: '© OpenStreetMap'
         }).addTo(map);
 
-        L.control.zoom({ position: 'bottomright' }).addTo(map);
-
-        // MAP CLICK LISTENER
         map.on('click', (e: any) => {
             if (isNavigatingRef.current) return;
-
-            // Clear highlight
-            if (highlightLayerRef.current) {
-                map.removeLayer(highlightLayerRef.current);
-                highlightLayerRef.current = null;
-            }
-
-            // --- LOGIC v10.0 ---
-            // 1. If Builder Mode is ON -> Append Pin
-            if (builderModeRef.current) {
-                addWaypoint(e.latlng);
-                return;
-            }
-
-            // 2. If Route is Empty -> Allow adding Pin A (Single Destination Mode)
-            if (waypointsRef.current.length === 0) {
-                addWaypoint(e.latlng);
-                return;
-            }
+            if (highlightLayerRef.current) { map.removeLayer(highlightLayerRef.current); highlightLayerRef.current = null; }
             
-            // 3. If Route Exists & Builder OFF -> Replace Pin A (Standard GPS behavior)
-            // But if multiple pins exist, we lock it to prevent accidental deletions
-            if (waypointsRef.current.length === 1) {
-                 setWaypoints([e.latlng]); // Move the single pin
-                 return;
+            // LOGIC FIX: Check mode
+            if (isBuilderModeRef.current) {
+                setWaypoints(prev => [...prev, e.latlng]);
+            } else {
+                setWaypoints([e.latlng]);
+                setShowSegments(false); // Close panel if starting new
             }
-
-            // 4. Locked
-            setNotification({type: 'info', msg: "Paspauskite '+', kad pridėtumėte taškus"});
         });
 
-        // Initial Location
         map.locate({ setView: true, maxZoom: 16, enableHighAccuracy: true });
-
-        map.on('locationfound', (e: any) => {
-            const { lat, lng } = e.latlng;
-            const newLoc = { lat, lng, accuracy: e.accuracy, speed: null, heading: null };
-            setUserLocation(newLoc);
-            updateUserMarker(newLoc);
-        });
-        
-        map.on('locationerror', () => {
-             setNotification({type: 'error', msg: "Nepavyko nustatyti vietos"});
-        });
-
         mapRef.current = map;
         startGpsTracking();
       };
-
-      // Delay init slightly to ensure container is ready
-      setTimeout(initMap, 100);
+      intervalId = setInterval(initMap, 100);
+      return () => clearInterval(intervalId);
   }, []);
-
-  const addWaypoint = (latlng: {lat: number, lng: number}) => {
-      setWaypoints(prev => [...prev, latlng]);
-  };
 
   // --- GPS TRACKING ---
   const startGpsTracking = () => {
     if (!navigator.geolocation) return;
-
-    if (gpsWatchId.current) navigator.geolocation.clearWatch(gpsWatchId.current);
-
     const onGeoSuccess = (pos: GeolocationPosition) => {
         const { latitude, longitude, accuracy, speed, heading } = pos.coords;
         const newLoc = { lat: latitude, lng: longitude, accuracy, speed, heading };
-        
         setUserLocation(newLoc);
         updateUserMarker(newLoc);
 
-        if (isNavigatingRef.current && mapRef.current && destinationRef.current) {
+        if (isRecordingRef.current) {
+            setRecordedPath(prev => {
+                const last = prev[prev.length - 1];
+                if (!last || getDistanceFromLatLonInM(latitude, longitude, last.lat, last.lng) > 3) {
+                    if (last) {
+                        const d = getDistanceFromLatLonInM(latitude, longitude, last.lat, last.lng);
+                        setTotalRecordedDist(prevD => prevD + d);
+                    }
+                    return [...prev, { lat: latitude, lng: longitude }];
+                }
+                return prev;
+            });
+        }
+
+        if (isNavigatingRef.current && mapRef.current) {
+            if (heading !== null && mapContainerRef.current) {
+                mapContainerRef.current.style.transform = `translate(-50%, -50%) rotate(${-heading}deg)`;
+                mapContainerRef.current.style.transition = 'transform 1.2s cubic-bezier(0.4, 0, 0.2, 1)';
+            }
             mapRef.current.setView([latitude, longitude], 19, { animate: true });
             
             const currentSpeedKmh = speed ? Math.round(speed * 3.6) : 0;
-            const dist = getDistanceFromLatLonInM(latitude, longitude, destinationRef.current.lat, destinationRef.current.lng);
-            const effectiveSpeed = (speed && speed > 0.5) ? speed : 1.4; 
-            const time = dist / effectiveSpeed;
+            const distRem = destinationRef.current ? getDistanceFromLatLonInM(latitude, longitude, destinationRef.current.lat, destinationRef.current.lng) : 0;
+            
+            let paceStr = '--:--';
+            if (speed && speed > 0.3) {
+                const minPerKm = 1000 / (speed * 60);
+                const mins = Math.floor(minPerKm);
+                const secs = Math.round((minPerKm - mins) * 60);
+                paceStr = `${mins}:${secs.toString().padStart(2, '0')}`;
+            }
 
-            setNavStats({
-                speed: currentSpeedKmh,
-                distanceRem: dist,
-                timeRem: time
+            const cal = Math.round((totalRecordedDist / 1000) * (transportMode === 'walking' ? 65 : 45));
+
+            setNavStats({ 
+                speed: currentSpeedKmh, 
+                distanceRem: distRem, 
+                timeRem: speed && speed > 0 ? distRem / speed : distRem / 1.4,
+                pace: paceStr,
+                calories: cal
             });
         }
     };
-
-    const onGeoError = (err: any) => console.warn("GPS Watch Error", err);
-
-    navigator.geolocation.getCurrentPosition(onGeoSuccess, onGeoError, { enableHighAccuracy: true });
-    gpsWatchId.current = navigator.geolocation.watchPosition(onGeoSuccess, onGeoError, { 
-        enableHighAccuracy: true, 
-        timeout: 2000 
-    });
+    gpsWatchId.current = navigator.geolocation.watchPosition(onGeoSuccess, console.warn, { enableHighAccuracy: true });
   };
 
-  const updateUserMarker = (loc: { lat: number, lng: number, accuracy: number, heading: number | null }) => {
+  const updateUserMarker = (loc: any) => {
     const L = (window as any).L;
     if (!mapRef.current || !L) return;
-
+    const rotation = isNavigatingRef.current ? 0 : (loc.heading || 0);
+    
     if (!userMarkerRef.current) {
       const userIcon = L.divIcon({
         className: 'bg-transparent',
-        html: `
-          <div class="relative flex h-5 w-5 -translate-x-1/2 -translate-y-1/2">
-            <span class="absolute inline-flex h-full w-full rounded-full bg-blue-500 border-2 border-white shadow-sm opacity-50 animate-ping"></span>
-            <span class="relative inline-flex rounded-full h-5 w-5 bg-blue-600 border-2 border-white shadow-md">
-               ${loc.heading ? '<div style="position:absolute; top:-4px; left:50%; transform:translateX(-50%); width:0; height:0; border-left:4px solid transparent; border-right:4px solid transparent; border-bottom:6px solid white;"></div>' : ''}
-            </span>
+        html: `<div class="user-marker-container" style="transform: rotate(${rotation}deg); transition: transform 0.3s">
+            <span class="absolute inline-flex h-12 w-12 -translate-x-1/2 -translate-y-1/2 rounded-full bg-blue-500 opacity-20 animate-ping"></span>
+            <div class="relative flex items-center justify-center rounded-full h-10 w-10 bg-blue-600 border-4 border-white shadow-2xl -translate-x-1/2 -translate-y-1/2">
+                 <div class="w-0 h-0 border-l-[8px] border-l-transparent border-r-[8px] border-r-transparent border-bottom-[16px] border-white mb-1"></div>
+            </div>
           </div>`,
         iconSize: [0, 0]
       });
       userMarkerRef.current = L.marker([loc.lat, loc.lng], { icon: userIcon, zIndexOffset: 1000 }).addTo(mapRef.current);
     } else {
       userMarkerRef.current.setLatLng([loc.lat, loc.lng]);
-    }
-
-    if (!accuracyCircleRef.current) {
-        accuracyCircleRef.current = L.circle([loc.lat, loc.lng], {
-            radius: loc.accuracy,
-            color: '#3b82f6',
-            fillColor: '#3b82f6',
-            fillOpacity: 0.05,
-            weight: 0,
-        }).addTo(mapRef.current);
-    } else {
-        accuracyCircleRef.current.setLatLng([loc.lat, loc.lng]);
-        accuracyCircleRef.current.setRadius(loc.accuracy);
-    }
-  };
-
-  const reCenterMap = () => {
-      if (userLocation && mapRef.current) {
-          mapRef.current.setView([userLocation.lat, userLocation.lng], 16, { animate: true });
-      } else {
-          setNotification({type:'info', msg:'Nustatoma vieta...'});
-          if (mapRef.current) mapRef.current.locate({ setView: true, maxZoom: 16 });
+      const el = userMarkerRef.current.getElement();
+      if (el) {
+          const inner = el.querySelector('.user-marker-container');
+          if (inner) inner.style.transform = `rotate(${rotation}deg)`;
       }
+    }
+    if (!accuracyCircleRef.current) {
+        accuracyCircleRef.current = L.circle([loc.lat, loc.lng], { radius: loc.accuracy, color: '#3b82f6', fillOpacity: 0.05, weight: 0 }).addTo(mapRef.current);
+    } else {
+        accuracyCircleRef.current.setLatLng([loc.lat, loc.lng]).setRadius(loc.accuracy);
+    }
   };
 
-  const undoLastWaypoint = () => {
-      setWaypoints(prev => prev.slice(0, -1));
-  };
-
-  // --- ROUTING CALCULATION ---
+  // --- ROUTING LOGIC ---
   useEffect(() => {
       if (!mapRef.current) return;
       const L = (window as any).L;
-      
-      // Cleanup previous control
-      if (routingControlRef.current) {
-          try { mapRef.current.removeControl(routingControlRef.current); } catch(e){}
-          routingControlRef.current = null;
-      }
-      
-      // Cleanup visual layers managed by us
+      if (routingControlRef.current) { try { mapRef.current.removeControl(routingControlRef.current); } catch(e){} }
       markerLayersRef.current.forEach(m => m.remove());
       markerLayersRef.current = [];
 
-      if (waypoints.length === 0 || !userLocationRef.current) {
-          setRoutes([]);
-          return;
-      }
+      if (waypoints.length === 0 || !userLocationRef.current) { setRoutes([]); return; }
 
       const planPoints = [
-          L.latLng(userLocationRef.current.lat, userLocationRef.current.lng),
-          ...waypoints.map(w => L.latLng(w.lat, w.lng))
+        L.latLng(userLocationRef.current.lat, userLocationRef.current.lng), 
+        ...waypoints.map(w => L.latLng(w.lat, w.lng))
       ];
 
-      let serviceUrl = 'https://router.project-osrm.org/route/v1';
-      let profile = 'car';
-      
-      if (transportMode === 'walking') {
-          serviceUrl = 'https://routing.openstreetmap.de/routed-foot/route/v1';
-          profile = 'driving'; 
-      } else if (transportMode === 'cycling') {
-          serviceUrl = 'https://routing.openstreetmap.de/routed-bike/route/v1';
-          profile = 'driving'; 
-      }
+      let serviceUrl = transportMode === 'walking' 
+          ? 'https://routing.openstreetmap.de/routed-foot/route/v1' 
+          : (transportMode === 'cycling' ? 'https://routing.openstreetmap.de/routed-bike/route/v1' : 'https://router.project-osrm.org/route/v1');
 
-      try {
-          const control = L.Routing.control({
-              waypoints: planPoints,
-              router: L.Routing.osrmv1({ serviceUrl, profile }),
-              // We hide the default lines (opacity 0) so we can draw our own custom ones
-              lineOptions: { styles: [{ color: 'transparent', opacity: 0 }] },
-              altLineOptions: { styles: [{ color: 'transparent', opacity: 0 }] },
-              show: false,
-              addWaypoints: false,
-              draggableWaypoints: false,
-              fitSelectedRoutes: false,
-              showAlternatives: true, // IMPORTANT: Enable multiple routes
-              createMarker: () => null 
-          }).addTo(mapRef.current);
+      const control = L.Routing.control({
+          waypoints: planPoints,
+          router: L.Routing.osrmv1({ serviceUrl, profile: 'driving' }),
+          lineOptions: { styles: [{ color: 'transparent', opacity: 0 }] },
+          altLineOptions: { styles: [{ color: 'transparent', opacity: 0 }] },
+          show: false,
+          showAlternatives: true,
+          createMarker: () => null,
+          fitSelectedRoutes: false,
+          routeWhileDragging: false
+      }).addTo(mapRef.current);
 
-          control.on('routesfound', (e: any) => {
-              // Map all found routes to our state
-              const foundRoutes = e.routes.map((r: any, i: number) => ({
-                  id: i,
-                  summary: r.summary,
-                  coordinates: r.coordinates,
-                  instructions: r.instructions,
-                  waypoints: r.waypoints,
-                  waypointIndices: r.waypointIndices,
-                  routeObj: r
-              }));
+      control.on('routesfound', (e: any) => {
+          setRoutes(e.routes.map((r: any, i: number) => ({
+              id: i, summary: r.summary, coordinates: r.coordinates, instructions: r.instructions, waypoints: r.waypoints, waypointIndices: r.waypointIndices, routeObj: r
+          })));
+          drawCustomMarkers(planPoints);
+      });
+      routingControlRef.current = control;
+  }, [waypoints, transportMode]);
 
-              setRoutes(foundRoutes);
-              drawCustomMarkers(planPoints);
-              
-              // Reset selection if out of bounds, otherwise keep current selection if possible
-              if (selectedRouteIndex >= foundRoutes.length) {
-                setSelectedRouteIndex(0);
-              }
-          });
-          
-          control.on('routingerror', (e: any) => {
-              console.warn("Routing Error:", e);
-              // setNotification({type: 'error', msg: "Nepavyko rasti maršruto"}); // Optional: noisy if it's just a temporary glitch
-          });
-
-          routingControlRef.current = control;
-
-      } catch (err) {
-          console.error("Routing Setup Error", err);
-      }
-  }, [waypoints, transportMode, userLocation?.lat, userLocation?.lng]);
-
-  // --- MAP DRAWING EFFECT ---
-  // This handles drawing the Blue/Grey lines based on selection
   useEffect(() => {
     if (!mapRef.current || routes.length === 0) {
-        // Clear if no routes
         routePolylinesRef.current.forEach(l => mapRef.current.removeLayer(l));
-        routePolylinesRef.current = [];
         segmentLayersRef.current.forEach(l => mapRef.current.removeLayer(l));
-        segmentLayersRef.current = [];
         return;
     }
-
     const L = (window as any).L;
-
-    // 1. Clear old lines
     routePolylinesRef.current.forEach(l => mapRef.current.removeLayer(l));
-    routePolylinesRef.current = [];
     segmentLayersRef.current.forEach(l => mapRef.current.removeLayer(l));
-    segmentLayersRef.current = [];
-    if (highlightLayerRef.current) {
-        mapRef.current.removeLayer(highlightLayerRef.current);
-        highlightLayerRef.current = null;
-    }
+    if (highlightLayerRef.current) mapRef.current.removeLayer(highlightLayerRef.current);
 
-    // 2. Draw Routes (Alternatives first, then Active)
-    // We sort so active is last (on top)
-    const sortedRoutes = routes.map((r, i) => ({...r, originalIndex: i}))
-                               .sort((a, b) => (a.originalIndex === selectedRouteIndex ? 1 : -1));
-
-    sortedRoutes.forEach((route) => {
-        const isActive = route.originalIndex === selectedRouteIndex;
-
-        // Visual Polyline
+    routes.forEach((route, i) => {
+        const isActive = i === selectedRouteIndex;
         const polyline = L.polyline(route.coordinates, {
-            color: isActive ? '#2563eb' : '#94a3b8', // Blue vs Slate-400
-            weight: isActive ? 7 : 5,
+            color: isActive ? '#2563eb' : '#94a3b8',
+            weight: isActive ? 10 : 7,
             opacity: isActive ? 0.9 : 0.6,
             lineCap: 'round',
-            lineJoin: 'round',
             zIndexOffset: isActive ? 100 : 10
         }).addTo(mapRef.current);
         
         if (isActive) {
             polyline.bringToFront();
-            // Create interactive click zones only for active route
             createInteractiveSegments(route);
-            
-            // Update stats for the active route
-            if (!isNavigatingRef.current) {
-                setNavStats({
-                    speed: 0,
-                    distanceRem: route.summary.totalDistance,
-                    timeRem: route.summary.totalTime
-                });
-            }
         } else {
-            // Click alternative to select it
-            polyline.on('click', () => setSelectedRouteIndex(route.originalIndex));
+            polyline.on('click', () => setSelectedRouteIndex(i));
         }
-
         routePolylinesRef.current.push(polyline);
     });
-
   }, [routes, selectedRouteIndex]);
-
 
   const drawCustomMarkers = (latLngs: any[]) => {
       const L = (window as any).L;
       latLngs.forEach((latLng, i) => {
           if (i === 0) return; 
-          
-          const waypointIndex = i - 1;
-          const letter = String.fromCharCode(65 + waypointIndex);
-          
+          const letter = String.fromCharCode(65 + i - 1);
           const icon = L.divIcon({
               className: 'bg-transparent',
-              html: `<div class="relative w-8 h-8 flex items-center justify-center transform hover:scale-110 transition-transform cursor-pointer">
-                        <div class="absolute inset-0 bg-slate-900 rounded-full border-2 border-white shadow-lg"></div>
-                        <span class="relative text-white font-bold text-sm">${letter}</span>
-                     </div>`,
-              iconSize: [32, 32],
-              iconAnchor: [16, 32]
+              html: `<div class="marker-pin">${letter}</div>`,
+              iconSize: [40, 40], iconAnchor: [20, 40]
           });
-
           const marker = L.marker(latLng, { icon, draggable: true }).addTo(mapRef.current);
-          
           marker.on('dragend', (e: any) => {
-              const newPos = e.target.getLatLng();
               setWaypoints(prev => {
                   const updated = [...prev];
-                  updated[waypointIndex] = { lat: newPos.lat, lng: newPos.lng };
+                  updated[i-1] = { lat: e.target.getLatLng().lat, lng: e.target.getLatLng().lng };
                   return updated;
               });
           });
-
           markerLayersRef.current.push(marker);
       });
   };
@@ -456,303 +311,220 @@ export default function MapPage() {
   const createInteractiveSegments = (route: RouteInfo) => {
       const L = (window as any).L;
       if (!mapRef.current || !route.waypointIndices) return;
-
       for (let i = 0; i < route.waypointIndices.length - 1; i++) {
-          const startIndex = route.waypointIndices[i];
-          const endIndex = route.waypointIndices[i+1];
-          const segmentCoords = route.coordinates.slice(startIndex, endIndex + 1);
-          
+          const segmentCoords = route.coordinates.slice(route.waypointIndices[i], route.waypointIndices[i+1] + 1);
           if (segmentCoords.length < 2) continue;
-
-          // 50px Click Zone - FORCE TO FRONT
-          const hitLayer = L.polyline(segmentCoords, {
-              color: '#ffffff', // White
-              weight: 50, 
-              opacity: 0.01, // Almost invisible but registered
-              zIndexOffset: 1000,
-              bubblingMouseEvents: false, 
-              interactive: true
-          }).addTo(mapRef.current);
-          
-          // Force click layer to front
+          const hitLayer = L.polyline(segmentCoords, { color: '#fff', weight: 60, opacity: 0.01, zIndexOffset: 1000, interactive: true }).addTo(mapRef.current);
           hitLayer.bringToFront();
-
-          const dist = calculateDistance(segmentCoords);
-          const time = (dist / 1000) / (transportMode === 'driving' ? 50 : 5) * 60; 
-
-          const startLabel = i === 0 ? "Jūsų vieta" : `Taškas ${String.fromCharCode(64 + i)}`;
-          const endLabel = `Taškas ${String.fromCharCode(65 + i)}`;
-
           hitLayer.on('click', (e: any) => {
               L.DomEvent.stopPropagation(e);
-              
-              if (highlightLayerRef.current) {
-                  mapRef.current.removeLayer(highlightLayerRef.current);
-              }
-
-              const highlight = L.polyline(segmentCoords, {
-                  color: '#f97316', // Orange highlight
-                  weight: 8,
-                  opacity: 0.9,
-                  lineCap: 'round',
-                  interactive: false
-              }).addTo(mapRef.current);
-              highlight.bringToFront();
-              
-              highlightLayerRef.current = highlight;
-
-              L.popup()
-                .setLatLng(e.latlng)
-                .setContent(`
-                     <div class="text-center font-sans min-w-[100px]">
-                        <div class="font-bold text-[9px] text-slate-400 uppercase tracking-wide mb-0.5">${startLabel} ➔ ${endLabel}</div>
-                        <div class="text-lg font-black text-slate-800">${formatDist(dist)}</div>
-                        <div class="text-xs text-blue-600 font-bold">~${Math.round(time)} min</div>
-                     </div>
-                `)
-                .openOn(mapRef.current);
+              highlightSegment(segmentCoords);
           });
-
           segmentLayersRef.current.push(hitLayer);
       }
+  };
+
+  const highlightSegment = (coords: any[]) => {
+      const L = (window as any).L;
+      if (highlightLayerRef.current) mapRef.current.removeLayer(highlightLayerRef.current);
+      highlightLayerRef.current = L.polyline(coords, { color: '#f97316', weight: 12, opacity: 0.9, lineCap: 'round' }).addTo(mapRef.current).bringToFront();
+      const dist = calculateDistance(coords);
+      mapRef.current.panTo(coords[Math.floor(coords.length / 2)], { animate: true });
+      setNotification({ type: 'info', msg: `Atkarpa: ${formatDist(dist)}` });
   };
 
   const calculateDistance = (coords: any[]) => {
       const L = (window as any).L;
       let d = 0;
-      for(let i=0; i<coords.length-1; i++) {
-          d += L.latLng(coords[i]).distanceTo(L.latLng(coords[i+1]));
-      }
+      for(let i=0; i<coords.length-1; i++) d += L.latLng(coords[i]).distanceTo(L.latLng(coords[i+1]));
       return d;
   };
 
-  const startNavigation = () => {
-      if (routes.length === 0) return;
-      setViewMode('navigation');
-      if (mapRef.current && userLocation) {
-          mapRef.current.setZoom(18);
-          mapRef.current.panTo([userLocation.lat, userLocation.lng], { animate: true });
-      }
-  };
-
-  const stopNavigation = () => {
-      setViewMode('map');
-      if (mapRef.current) mapRef.current.setZoom(15);
-  };
-
-  // --- MATH ---
   const getDistanceFromLatLonInM = (lat1: number, lon1: number, lat2: number, lon2: number) => {
     const R = 6371000; 
     const dLat = (lat2 - lat1) * (Math.PI / 180);
     const dLon = (lon2 - lon1) * (Math.PI / 180);
-    const a =
-      Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-      Math.cos(lat1 * (Math.PI / 180)) * Math.cos(lat2 * (Math.PI / 180)) *
-      Math.sin(dLon / 2) * Math.sin(dLon / 2);
-    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-    return R * c; 
-  };
-
-  const getSegmentDistance = (index: number) => {
-      if (routes.length === 0) return 0;
-      // Use selected Route
-      const r = routes[selectedRouteIndex];
-      if (!r || !r.waypointIndices || r.waypointIndices.length <= index + 1) return 0;
-      
-      const startI = r.waypointIndices[index];
-      const endI = r.waypointIndices[index+1];
-      const coords = r.coordinates.slice(startI, endI + 1);
-      return calculateDistance(coords);
+    const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) + Math.cos(lat1 * (Math.PI / 180)) * Math.cos(lat2 * (Math.PI / 180)) * Math.sin(dLon / 2) * Math.sin(dLon / 2);
+    return R * (2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))); 
   };
 
   const formatTime = (s: number) => {
       const h = Math.floor(s / 3600);
       const m = Math.round((s % 3600) / 60);
-      if (h > 0) return `${h} val ${m} min`;
-      return `${m} min`;
+      return h > 0 ? `${h} v ${m} m` : `${m} min`;
   };
 
-  const formatDist = (meters: number) => {
-      if (meters >= 1000) return `${(meters/1000).toFixed(1)} km`;
-      return `${Math.round(meters)} m`;
+  const formatDist = (meters: number) => meters >= 1000 ? `${(meters/1000).toFixed(1)} km` : `${Math.round(meters)} m`;
+
+  const toggleRecording = () => {
+    if (isRecording) {
+      setIsRecording(false);
+      setNotification({ type: 'info', msg: 'Įrašymas sustabdytas' });
+    } else {
+      setRecordedPath([]);
+      setTotalRecordedDist(0);
+      setIsRecording(true);
+      setNotification({ type: 'info', msg: 'Įrašymas pradėtas 🔴' });
+    }
   };
 
   return (
-    <div className="w-full h-screen overflow-hidden bg-slate-50 font-sans touch-none select-none text-slate-900">
+    <div className="w-full h-screen overflow-hidden bg-[#f0f9ff] font-sans touch-none select-none text-slate-900 relative">
       <Head>
-        <title>TapuTapu v10.3</title>
+        <title>TapuTapu v10.9 Winter</title>
+        <style>{`
+          @keyframes snowfall {
+            0% { transform: translateY(-10vh) translateX(0); }
+            100% { transform: translateY(110vh) translateX(30px); }
+          }
+          .snowflake {
+            position: absolute; color: white; user-select: none; z-index: 6000; pointer-events: none;
+            font-size: 1.5rem; animation: snowfall 10s linear infinite;
+          }
+          .marker-pin {
+            width: 42px; height: 42px; background: #1e293b; border: 4px solid white; border-radius: 50% 50% 50% 0;
+            transform: rotate(-45deg); display: flex; align-items: center; justify-content: center;
+            color: white; font-weight: 900; font-size: 18px; box-shadow: 0 4px 15px rgba(0,0,0,0.5);
+          }
+          .marker-pin > * { transform: rotate(45deg); }
+          .user-marker-container { position: relative; width: 0; height: 0; }
+          .no-scrollbar::-webkit-scrollbar { display: none; }
+          .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+        `}</style>
       </Head>
 
-      {/* Notification Toast */}
-      {notification && (
-        <div className="absolute top-24 left-1/2 -translate-x-1/2 z-[3000] bg-slate-800/95 text-white px-5 py-2.5 rounded-full shadow-xl text-sm font-medium animate-fade-in pointer-events-none whitespace-nowrap">
-            {notification.msg}
-        </div>
-      )}
+      {/* SNOW ON LANDING */}
+      {viewMode === 'landing' && [...Array(25)].map((_, i) => (
+        <div key={i} className="snowflake" style={{ 
+            left: `${Math.random() * 100}%`, 
+            animationDelay: `${Math.random() * 8}s`,
+            animationDuration: `${5 + Math.random() * 8}s`,
+            opacity: 0.5 + Math.random() * 0.5
+        }}>❄️</div>
+      ))}
 
-      {/* MAP LAYER */}
-      <div ref={mapContainerRef} className="absolute inset-0 z-0" />
+      {/* MAP CONTAINER */}
+      <div 
+        ref={mapContainerRef} 
+        className="absolute top-1/2 left-1/2 z-0 w-[400vw] h-[400vh]"
+        style={{ 
+            transform: `translate(-50%, -50%) rotate(0deg)`,
+            transformOrigin: 'center center',
+            willChange: 'transform'
+        }} 
+      />
 
-      {/* LANDING PAGE - OVERLAY Z-50 */}
+      {/* LANDING */}
       {viewMode === 'landing' && (
-        <div className="absolute inset-0 z-50 bg-gradient-to-br from-teal-400 via-emerald-400 to-blue-500 flex flex-col p-6 items-center justify-center animate-fade-in">
-           
-           <div className="w-full max-w-sm bg-white/20 backdrop-blur-xl border border-white/40 rounded-[2rem] p-8 shadow-2xl flex flex-col gap-8 items-center text-center">
-               
-               <div className="flex flex-col items-center">
-                   <div className="w-24 h-24 bg-white rounded-full flex items-center justify-center mb-4 shadow-lg text-5xl">
-                       🌲
-                   </div>
-                   <h1 className="text-5xl font-black text-white drop-shadow-md tracking-tight">TapuTapu</h1>
-                   <div className="text-white/80 font-mono text-xs mt-1 bg-black/10 px-2 py-0.5 rounded">v10.3</div>
-                   <p className="text-white/90 text-sm font-bold tracking-widest mt-2 uppercase">Atraskime kartu!</p>
+        <div className="absolute inset-0 z-[5000] bg-gradient-to-br from-blue-300 via-sky-100 to-white flex flex-col p-6 items-center justify-center animate-fade-in">
+           <div className="w-full max-w-sm bg-white/50 backdrop-blur-3xl border-4 border-white/80 rounded-[4rem] p-12 shadow-2xl text-center relative">
+               <div className="w-32 h-32 bg-white rounded-full flex items-center justify-center mb-6 mx-auto shadow-xl text-7xl border-4 border-blue-100">🐧</div>
+               <h1 className="text-5xl font-black text-blue-600 tracking-tighter drop-shadow-sm">TapuTapu</h1>
+               <div className="bg-blue-600 text-white text-[12px] font-black uppercase px-5 py-2 rounded-full w-max mx-auto mt-4 tracking-[0.2em] shadow-lg">Žiemos Metas ❄️</div>
+               <div className="mt-12 space-y-6">
+                   <button onClick={() => setViewMode('map')} className="w-full py-6 bg-blue-500 text-white rounded-[2.5rem] font-black text-3xl shadow-2xl active:scale-95 transition-all border-b-[10px] border-blue-700">EIKIME!</button>
+                   <button onClick={() => setViewMode('lost')} className="w-full py-5 bg-rose-500 text-white rounded-[2.5rem] font-black text-2xl shadow-2xl active:scale-95 transition-all border-b-[10px] border-rose-700">PAGALBOS!</button>
                </div>
-               
-               <div className="w-full space-y-4">
-                   <button 
-                     onClick={() => setViewMode('map')}
-                     className="w-full py-5 bg-white text-slate-800 rounded-2xl font-black text-xl shadow-xl active:scale-95 transition-transform flex items-center justify-center gap-4 hover:bg-slate-50 group"
-                   >
-                     <span className="text-2xl group-hover:animate-bounce">🗺️</span>
-                     Kur aš esu?
-                   </button>
-                   
-                   <button 
-                     onClick={() => setViewMode('lost')}
-                     className="w-full py-5 bg-gradient-to-r from-orange-500 to-red-500 text-white rounded-2xl font-black text-xl shadow-xl shadow-orange-500/40 active:scale-95 transition-transform flex items-center justify-center gap-4 hover:brightness-110 group"
-                   >
-                     <span className="text-2xl group-hover:animate-pulse">🆘</span>
-                     PASIKLYDAU!
-                   </button>
-               </div>
-
-               <p className="text-white/70 text-xs mt-2 font-medium">
-                   Paprasta. Saugu. Patikima.
-               </p>
+               <p className="mt-12 text-blue-400 font-black text-[11px] uppercase tracking-widest opacity-70">v10.9 Pro</p>
            </div>
         </div>
       )}
 
-      {/* --- UI OVERLAYS (Only visible in MAP mode) --- */}
+      {/* MAP UI ELEMENTS */}
       {viewMode === 'map' && (
         <>
-            {/* Top Bar: Transport Modes */}
-            <div className="absolute top-4 left-4 right-4 z-[1000] flex justify-center pointer-events-none">
-                <div className="pointer-events-auto bg-white/90 backdrop-blur shadow-md rounded-full p-1 flex gap-1 border border-slate-100">
-                   <button onClick={() => setViewMode('landing')} className="w-10 h-10 rounded-full flex items-center justify-center hover:bg-slate-50 text-slate-400">
-                      <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" /></svg>
-                   </button>
-                   <div className="w-px bg-slate-200 mx-1 my-1"></div>
-                   {['walking', 'cycling', 'driving'].map((m) => (
-                       <button
-                         key={m}
-                         onClick={() => setTransportMode(m as TransportMode)}
-                         className={`w-10 h-10 rounded-full flex items-center justify-center transition-all ${transportMode === m ? 'bg-slate-800 text-white' : 'text-slate-400 hover:bg-slate-50'}`}
-                       >
-                         {m === 'walking' ? '🚶' : m === 'cycling' ? '🚴' : '🚗'}
-                       </button>
-                   ))}
+            <div className="absolute top-6 left-4 right-4 z-[1000] flex justify-center pointer-events-none">
+                <div className="pointer-events-auto bg-white/95 backdrop-blur-2xl shadow-2xl rounded-full p-2 flex items-center border-2 border-white">
+                   <button onClick={() => setViewMode('landing')} className="w-12 h-12 rounded-full flex items-center justify-center text-3xl hover:bg-slate-50 transition-colors">🐧</button>
+                   <div className="w-px bg-slate-200 h-8 mx-4"></div>
+                   <div className="flex gap-2">
+                       {['walking', 'cycling', 'driving'].map((m) => (
+                           <button key={m} onClick={() => setTransportMode(m as TransportMode)} className={`w-12 h-12 rounded-full flex items-center justify-center text-2xl transition-all ${transportMode === m ? 'bg-blue-600 text-white scale-110 shadow-xl' : 'text-slate-400 hover:bg-slate-100'}`}>
+                             {m === 'walking' ? '🚶' : m === 'cycling' ? '🚴' : '🚗'}
+                           </button>
+                       ))}
+                   </div>
                 </div>
             </div>
 
-            {/* Right Control Bar */}
-            <div className="absolute top-20 right-4 z-[1000] flex flex-col gap-3">
-                {/* 1. BUILDER TOGGLE */}
-                <button 
-                  onClick={() => {
-                      const newState = !isBuilderMode;
-                      setIsBuilderMode(newState);
-                      setNotification({type: 'info', msg: newState ? 'Paspauskite žemėlapį, kad pridėtumėte tašką' : 'Maršrutas užrakintas'});
-                  }} 
-                  className={`w-12 h-12 rounded-full shadow-lg flex items-center justify-center transition-all border-2 ${isBuilderMode ? 'bg-emerald-500 text-white border-emerald-600' : 'bg-white text-slate-600 border-white'}`}
-                >
-                  <span className="text-2xl font-bold">{isBuilderMode ? '✓' : '+'}</span>
+            {/* SIDEBAR */}
+            <div className="absolute top-28 right-4 z-[1000] flex flex-col gap-5">
+                <button onClick={toggleRecording} className={`w-16 h-16 rounded-full shadow-2xl flex flex-col items-center justify-center transition-all border-4 ${isRecording ? 'bg-rose-600 border-rose-300' : 'bg-white border-white text-rose-500 font-black'}`}>
+                   <div className={`w-5 h-5 rounded-full bg-rose-500 ${isRecording ? 'animate-pulse' : ''} border-2 border-white`}></div>
+                   <span className="text-[9px] mt-1 uppercase tracking-tighter leading-none">REC</span>
                 </button>
 
-                {/* 2. UNDO */}
-                {isBuilderMode && waypoints.length > 0 && (
-                    <button 
-                        onClick={undoLastWaypoint}
-                        className="w-12 h-12 bg-white rounded-full shadow-lg flex items-center justify-center text-slate-600 active:scale-95"
-                    >
-                        <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6" /></svg>
-                    </button>
-                )}
-                
-                {/* 3. RECENTER */}
-                <button 
-                    onClick={reCenterMap}
-                    className="w-12 h-12 bg-white rounded-full shadow-lg flex items-center justify-center text-blue-600"
-                >
-                    <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
+                <button onClick={() => setIsBuilderMode(!isBuilderMode)} className={`w-16 h-16 rounded-full shadow-2xl flex flex-col items-center justify-center border-4 transition-all ${isBuilderMode ? 'bg-emerald-500 border-emerald-300 text-white' : 'bg-white border-white text-emerald-600 font-black'}`}>
+                    <span className="text-4xl font-black leading-none">{isBuilderMode ? '✓' : '+'}</span>
+                    <span className="text-[9px] uppercase mt-1 tracking-tighter leading-none">TAŠKAS</span>
                 </button>
 
-                {/* 4. SOS */}
-                <button 
-                    onClick={() => setViewMode('lost')}
-                    className="w-12 h-12 bg-rose-500 rounded-full shadow-lg flex items-center justify-center text-white animate-pulse"
-                >
-                    <span className="text-xs font-bold">SOS</span>
+                <button onClick={() => mapRef.current?.locate({setView: true, maxZoom: 16})} className="w-16 h-16 bg-blue-600 border-4 border-blue-300 rounded-full shadow-2xl flex flex-col items-center justify-center text-white">
+                    <span className="text-3xl">🎯</span>
+                    <span className="text-[9px] font-black uppercase mt-1 tracking-tighter leading-none">AŠ ČIA</span>
+                </button>
+
+                <button onClick={() => setViewMode('lost')} className="w-16 h-16 bg-rose-700 border-4 border-rose-400 rounded-full shadow-2xl flex flex-col items-center justify-center text-white animate-pulse">
+                    <span className="text-2xl font-black leading-none">🆘</span>
+                    <span className="text-[9px] font-black mt-1 tracking-tighter leading-none uppercase">SOS</span>
                 </button>
             </div>
 
-            {/* Bottom Route Info Pill */}
+            {/* ROUTE SUMMARY & DETAILS */}
             {routes.length > 0 && (
-                <div className="absolute bottom-6 left-4 right-4 z-[1000] pointer-events-none flex flex-col items-center gap-2">
-                    
-                    {/* Route Selection Toggles - COMPACT */}
-                    {routes.length > 1 && (
-                        <div className="pointer-events-auto flex gap-2 mb-1 overflow-x-auto p-1 max-w-full">
-                            {routes.map((r, idx) => (
-                                <button
-                                    key={idx}
-                                    onClick={() => setSelectedRouteIndex(idx)}
-                                    className={`px-3 py-1.5 rounded-full text-xs font-bold shadow-md transition-all whitespace-nowrap ${
-                                        selectedRouteIndex === idx 
-                                        ? 'bg-blue-600 text-white ring-2 ring-blue-300' 
-                                        : 'bg-white text-slate-600 hover:bg-slate-50'
-                                    }`}
-                                >
-                                    {formatTime(r.summary.totalTime)}
-                                </button>
-                            ))}
-                        </div>
-                    )}
-
-                    {/* Segments (Collapsible) - COMPACT */}
+                <div className="absolute bottom-6 left-4 right-4 z-[1000] pointer-events-none flex flex-col items-center gap-3">
+                    {/* SEGMENT LIST (Pins A, B, C...) */}
                     {showSegments && (
-                        <div className="pointer-events-auto w-full max-w-sm bg-white/95 backdrop-blur rounded-xl p-3 shadow-xl border border-slate-200 mb-1 max-h-40 overflow-y-auto">
-                            <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2">Maršruto Atkarpos</h4>
-                            <div className="text-xs text-slate-600 space-y-1">
-                                {waypoints.map((wp, i) => (
-                                    <div key={i} className="flex justify-between border-b border-slate-100 pb-1">
-                                        <span>{i === 0 ? "Nuo Jūsų" : `Taškas ${String.fromCharCode(64 + i)}`} → {String.fromCharCode(65 + i)}</span>
-                                        <span className="font-mono font-bold">{formatDist(getSegmentDistance(i))}</span>
-                                    </div>
-                                ))}
+                        <div className="pointer-events-auto w-full max-w-sm bg-white/95 backdrop-blur-xl rounded-[2.5rem] p-5 shadow-2xl border-4 border-white mb-2 animate-slide-up max-h-[40vh] overflow-y-auto no-scrollbar">
+                            <div className="flex justify-between items-center mb-4">
+                                <h3 className="font-black text-xs uppercase tracking-widest text-blue-600">Maršruto Atkarpos</h3>
+                                <button onClick={() => setShowSegments(false)} className="text-slate-300">✕</button>
+                            </div>
+                            <div className="space-y-2">
+                                {routes[selectedRouteIndex]?.waypointIndices?.map((idx, i) => {
+                                    if (i === 0) return null;
+                                    const prevIdx = routes[selectedRouteIndex].waypointIndices[i-1];
+                                    const segCoords = routes[selectedRouteIndex].coordinates.slice(prevIdx, idx + 1);
+                                    const d = calculateDistance(segCoords);
+                                    const startLabel = i === 1 ? 'Aš' : String.fromCharCode(65 + i - 2);
+                                    const endLabel = String.fromCharCode(65 + i - 1);
+                                    return (
+                                        <button 
+                                            key={i} 
+                                            onClick={() => highlightSegment(segCoords)}
+                                            className="w-full flex items-center justify-between p-3 bg-slate-50 rounded-2xl border border-slate-100 active:scale-95 transition-all text-left"
+                                        >
+                                            <div className="flex items-center gap-3">
+                                                <div className="w-7 h-7 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center font-black text-[10px]">{startLabel}</div>
+                                                <div className="text-slate-300">➔</div>
+                                                <div className="w-7 h-7 bg-blue-600 text-white rounded-full flex items-center justify-center font-black text-[10px]">{endLabel}</div>
+                                            </div>
+                                            <span className="font-black text-slate-700 text-sm">{formatDist(d)}</span>
+                                        </button>
+                                    );
+                                })}
                             </div>
                         </div>
                     )}
 
-                    {/* Main Pill - COMPACT */}
-                    <div className="pointer-events-auto w-full max-w-sm bg-white rounded-xl p-3 shadow-2xl flex items-center justify-between border border-slate-100">
-                        <div onClick={() => setShowSegments(!showSegments)} className="flex flex-col cursor-pointer active:opacity-70 transition-opacity">
-                            <div className="flex items-baseline gap-1">
-                                <span className="text-2xl font-black text-slate-800">{formatTime(routes[selectedRouteIndex]?.summary.totalTime || 0)}</span>
-                                <span className="text-xs font-medium text-slate-500">({formatDist(routes[selectedRouteIndex]?.summary.totalDistance || 0)})</span>
+                    <div className="pointer-events-auto w-full max-w-sm bg-white/95 backdrop-blur-xl rounded-[2.5rem] p-3 shadow-2xl flex items-center justify-between border-4 border-white relative overflow-hidden">
+                        <div className="flex flex-col pl-4">
+                            <div className="flex items-center gap-2">
+                                <span className="text-3xl font-black text-slate-800 tracking-tighter leading-tight">{formatTime(routes[selectedRouteIndex]?.summary.totalTime || 0)}</span>
+                                <span className="text-xs font-bold text-blue-500 bg-blue-50 px-2 py-0.5 rounded-full">{(routes[selectedRouteIndex]?.summary.totalDistance / 1000).toFixed(1)} km</span>
                             </div>
-                            <div className="text-[10px] text-blue-600 font-bold flex items-center gap-1">
-                                {waypoints.length} taškai (Išskleisti)
+                            <div 
+                                onClick={() => setShowSegments(!showSegments)} 
+                                className={`text-[9px] font-black uppercase tracking-widest mt-0.5 cursor-pointer flex items-center gap-1 transition-colors ${showSegments ? 'text-blue-600' : 'text-slate-400'}`}
+                            >
+                                Maršrutas {showSegments ? '▲' : '▼'}
                             </div>
                         </div>
                         
                         <div className="flex gap-2">
-                            <button onClick={() => { setWaypoints([]); setRoutes([]); }} className="w-10 h-10 rounded-full bg-slate-100 text-slate-400 flex items-center justify-center hover:bg-slate-200">
-                                ✕
-                            </button>
-                            <button onClick={startNavigation} className="h-10 px-6 bg-blue-600 text-white rounded-full font-bold shadow-lg shadow-blue-200 active:scale-95 transition-transform flex items-center gap-2">
-                                <span>Vykstame</span>
-                                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}><path strokeLinecap="round" strokeLinejoin="round" d="M13 7l5 5m0 0l-5 5m5-5H6" /></svg>
+                            <button onClick={() => { setWaypoints([]); setRoutes([]); setShowSegments(false); }} className="w-11 h-11 rounded-full bg-slate-100 text-slate-400 flex items-center justify-center text-sm hover:bg-slate-200 transition-colors">✕</button>
+                            <button onClick={() => setViewMode('navigation')} className="h-12 px-8 bg-blue-600 text-white rounded-full font-black text-base shadow-xl active:scale-95 transition-all border-b-4 border-blue-800">
+                                VYKSTAME!
                             </button>
                         </div>
                     </div>
@@ -761,44 +533,64 @@ export default function MapPage() {
         </>
       )}
 
-      {/* --- NAVIGATION MODE --- */}
+      {/* NAVIGATION OVERLAY */}
       {viewMode === 'navigation' && (
-          <>
-            <div className="absolute top-0 left-0 right-0 bg-slate-900 text-white p-4 pt- safe z-[1000] flex justify-between items-start shadow-xl">
+          <div className="absolute inset-0 z-[4000] pointer-events-none flex flex-col justify-between">
+            <div className="pointer-events-auto bg-slate-900/90 backdrop-blur-3xl text-white p-8 pt-14 shadow-2xl flex justify-between items-center border-b-8 border-white/5">
                  <div className="flex flex-col">
-                     <span className="text-xs text-slate-400 uppercase tracking-wider font-bold">Kitas posūkis</span>
-                     <span className="text-2xl font-bold flex items-center gap-2">
-                         ⬆️ {formatDist(navStats.distanceRem > 100 ? 100 : navStats.distanceRem)}
+                     <span className="text-xs text-blue-400 font-black uppercase tracking-[0.3em] mb-1">Tiesiog pirmyn</span>
+                     <span className="text-4xl font-black tracking-tighter flex items-center gap-5">
+                         <span className="text-5xl animate-bounce">⬆️</span> 100 m
                      </span>
                  </div>
-                 <button onClick={stopNavigation} className="bg-slate-800 text-white px-3 py-1 rounded text-xs font-bold border border-slate-700">
-                     Baigti
-                 </button>
+                 <button onClick={() => setViewMode('map')} className="bg-white text-slate-900 px-10 py-4 rounded-full font-black text-lg shadow-2xl active:scale-95">Baigti</button>
             </div>
 
-            <div className="absolute bottom-0 left-0 right-0 bg-white p-6 pb-safe z-[1000] rounded-t-3xl shadow-[0_-10px_40px_rgba(0,0,0,0.1)]">
-                 <div className="grid grid-cols-3 gap-4 text-center">
+            {transportMode !== 'driving' && (
+                <div className="absolute top-48 left-4 flex flex-col gap-5">
+                    <div className="bg-white/95 backdrop-blur-2xl rounded-[2.5rem] p-6 shadow-2xl border-4 border-white w-32 flex flex-col items-center">
+                        <span className="text-[10px] text-slate-400 font-black uppercase tracking-widest">Tempas</span>
+                        <span className="text-2xl font-black text-slate-800 tracking-tighter">{navStats.pace}</span>
+                        <span className="text-[10px] text-slate-400 font-bold uppercase mt-1">min/km</span>
+                    </div>
+                    <div className="bg-white/95 backdrop-blur-2xl rounded-[2.5rem] p-6 shadow-2xl border-4 border-white w-32 flex flex-col items-center">
+                        <span className="text-[10px] text-slate-400 font-black uppercase tracking-widest">Kcal</span>
+                        <span className="text-2xl font-black text-slate-800 tracking-tighter">{navStats.calories}</span>
+                        <span className="text-[10px] text-slate-400 font-bold uppercase mt-1">kcal</span>
+                    </div>
+                </div>
+            )}
+
+            <div className="pointer-events-auto bg-white p-10 rounded-t-[4.5rem] shadow-[0_-30px_100px_rgba(0,0,0,0.3)] border-t-[10px] border-slate-50">
+                 <div className="grid grid-cols-3 gap-8 text-center">
                      <div className="flex flex-col">
-                         <span className="text-3xl font-black text-slate-800">{navStats.speed}</span>
-                         <span className="text-[10px] text-slate-400 uppercase font-bold tracking-wider">km/h</span>
+                         <span className="text-5xl font-black text-slate-800 tracking-tighter">{navStats.speed}</span>
+                         <span className="text-[12px] text-slate-400 font-black uppercase mt-2 tracking-widest">km/val</span>
                      </div>
-                     <div className="flex flex-col border-x border-slate-100">
-                         <span className="text-3xl font-black text-slate-800">{formatTime(navStats.timeRem)}</span>
-                         <span className="text-[10px] text-slate-400 uppercase font-bold tracking-wider">Liko</span>
+                     <div className="flex flex-col border-x-4 border-slate-50 px-5">
+                         <span className="text-5xl font-black text-slate-800 tracking-tighter">{formatTime(navStats.timeRem)}</span>
+                         <span className="text-[12px] text-slate-400 font-black uppercase mt-2 tracking-widest">Liko</span>
                      </div>
                      <div className="flex flex-col">
-                         <span className="text-3xl font-black text-slate-800">{(navStats.distanceRem / 1000).toFixed(1)}</span>
-                         <span className="text-[10px] text-slate-400 uppercase font-bold tracking-wider">km</span>
+                         <span className="text-5xl font-black text-slate-800 tracking-tighter">{(navStats.distanceRem / 1000).toFixed(1)}</span>
+                         <span className="text-[12px] text-slate-400 font-black uppercase mt-2 tracking-widest">km</span>
                      </div>
                  </div>
             </div>
-          </>
+          </div>
       )}
 
-      {/* --- LOST MODE --- */}
+      {/* SOS OVERLAY */}
       {viewMode === 'lost' && (
-        <div className="absolute inset-0 z-[2000]">
+        <div className="absolute inset-0 z-[6000]">
             <LostView lat={userLocation?.lat || 0} lng={userLocation?.lng || 0} onClose={() => setViewMode('landing')} />
+        </div>
+      )}
+
+      {/* NOTIFICATIONS */}
+      {notification && (
+        <div className="absolute top-28 left-1/2 -translate-x-1/2 z-[8000] bg-slate-900/95 text-white px-8 py-4 rounded-full shadow-2xl text-lg font-black animate-fade-in border-4 border-white/20 whitespace-nowrap">
+            {notification.msg}
         </div>
       )}
     </div>
