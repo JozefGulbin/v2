@@ -1,30 +1,54 @@
 // EnhancedGpsTracker.tsx
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useState } from 'react';
 
 const EnhancedGpsTracker = () => {
-    const gpsDataRef = useRef({ latitude: 0, longitude: 0, accuracy: 0 });
+    const [location, setLocation] = useState({
+        latitude: null,
+        longitude: null,
+        heading: null,
+    });
+
+    // Kalman filter variables
+    let q = 0.01, r = 0.1;
+    let xhat = 0, p = 1, k = 0;
+
+    const kalmanFilter = (measurement) => {
+        // Prediction
+        p += q;
+        // Measurement update
+        k = p / (p + r);
+        xhat += k * (measurement - xhat);
+        p *= (1 - k);
+        return xhat;
+    };
 
     useEffect(() => {
-  const handleGPSUpdate = (event: GeolocationPositionEvent) => {
-            const { latitude, longitude, accuracy } = event.coords;
-            gpsDataRef.current = { latitude, longitude, accuracy };
-            // Implement Kalman filter to improve accuracy
-            // Implement heading detection logic here
+        const handleSuccess = (position) => {
+            const { latitude, longitude } = position.coords;
+            const heading = position.coords.heading;
+            // Apply Kalman filter to the obtained latitude and longitude
+            const filteredLatitude = kalmanFilter(latitude);
+            const filteredLongitude = kalmanFilter(longitude);
+            setLocation({
+                latitude: filteredLatitude,
+                longitude: filteredLongitude,
+                heading,
+            });
         };
 
-        navigator.geolocation.watchPosition(handleGPSUpdate, (error) => {
-            console.error('Error getting GPS data:', error);
-        }, { enableHighAccuracy: true });
+        const handleError = (error) => {
+            console.error('Error obtaining location:', error);
+        };
 
-        return () => { /* Cleanup geolocation watch */ };
+        navigator.geolocation.watchPosition(handleSuccess, handleError);
     }, []);
 
     return (
         <div>
-            <h2>GPS Tracker</h2>
-            <p>Latitude: {gpsDataRef.current.latitude}</p>
-            <p>Longitude: {gpsDataRef.current.longitude}</p>
-            <p>Accuracy: {gpsDataRef.current.accuracy} meters</p>
+            <h1>Enhanced GPS Tracker</h1>
+            <p>Latitude: {location.latitude}</p>
+            <p>Longitude: {location.longitude}</p>
+            <p>Heading: {location.heading}</p>
         </div>
     );
 };
