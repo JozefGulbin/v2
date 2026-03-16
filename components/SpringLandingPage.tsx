@@ -21,7 +21,8 @@ const SpringLandingPage = ({ onEikime, onMarsrutai, onSos }: SpringLandingPagePr
       justifyContent: 'center',
       padding: '32px',
       overflow: 'auto',
-      position: 'relative'
+      width: '100%',
+      height: '100%'
     }}>
       {/* Floating Spring Elements - BACKGROUND */}
       <div style={{ position: 'absolute', top: '5%', left: '5%', fontSize: '60px', opacity: 0.4, animation: 'float 6s ease-in-out infinite' }}>🌸</div>
@@ -79,7 +80,6 @@ const SpringLandingPage = ({ onEikime, onMarsrutai, onSos }: SpringLandingPagePr
             color: '#fff',
             fontWeight: 'bold',
             letterSpacing: '2px',
-            backgroundColor: 'linear-gradient(135deg, #7cb342, #4caf50)',
             backgroundImage: 'linear-gradient(135deg, #7cb342, #4caf50)',
             padding: '8px 16px',
             borderRadius: '20px',
