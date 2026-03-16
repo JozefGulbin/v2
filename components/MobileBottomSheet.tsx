@@ -1,28 +1,137 @@
-import React, { useState } from 'react';
+import React from 'react';
 
-const MobileBottomSheet = () => {
-    const [isOpen, setIsOpen] = useState(false);
+const MobileMapLayout = () => {
+  const [isStatsOpen, setIsStatsOpen] = React.useState(false);
 
-    const togglePanel = () => {
-        setIsOpen(!isOpen);
-    };
+  const handleSOSClick = () => {
+    alert('SOS activated!');
+  };
 
-    return (
-        <div style={{ position: 'fixed', bottom: '0', left: '0', right: '0', zIndex: 1000 }}>
-            <div style={{ display: isOpen ? 'block' : 'none', background: 'white', padding: '10px', borderTop: '1px solid #ccc' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                    <div><strong>Stats:</strong> Sample Stats Here</div>
-                    <div>
-                        <button onClick={() => alert('Action 1')}>Action 1</button>
-                        <button onClick={() => alert('Action 2')}>Action 2</button>
-                    </div>
-                </div>
-            </div>
-            <button onClick={togglePanel} style={{ width: '100%', padding: '10px', background: '#007bff', color: 'white', border: 'none' }}>
-                {isOpen ? 'Hide' : 'Show'} Bottom Panel
-            </button>
+  const handleGPSClick = () => {
+    alert('GPS recenter!');
+  };
+
+  return (
+    <div style={{
+      position: 'relative',
+      width: '100%',
+      height: '100vh',
+      overflow: 'hidden'
+    }}>
+      {/* Map Component would be here */}
+      <div style={{
+        flex: 1,
+        backgroundColor: '#f0f0f0',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        fontSize: '18px',
+        color: '#666'
+      }}>
+        Map Container
+      </div>
+
+      {/* Floating Buttons */}
+      <button
+        onClick={handleSOSClick}
+        style={{
+          position: 'absolute',
+          bottom: '110px',
+          right: '20px',
+          backgroundColor: '#f0c14b',
+          padding: '10px 14px',
+          borderRadius: '50%',
+          border: 'none',
+          cursor: 'pointer',
+          fontWeight: 'bold',
+          width: '50px',
+          height: '50px',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center'
+        }}
+      >
+        SOS
+      </button>
+
+      <button
+        onClick={handleGPSClick}
+        style={{
+          position: 'absolute',
+          bottom: '55px',
+          right: '20px',
+          backgroundColor: '#f0c14b',
+          padding: '10px 14px',
+          borderRadius: '50%',
+          border: 'none',
+          cursor: 'pointer',
+          fontWeight: 'bold',
+          width: '50px',
+          height: '50px',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center'
+        }}
+      >
+        GPS
+      </button>
+
+      <button
+        onClick={() => setIsStatsOpen(!isStatsOpen)}
+        style={{
+          position: 'absolute',
+          bottom: '20px',
+          right: '20px',
+          backgroundColor: '#f0c14b',
+          padding: '10px 14px',
+          borderRadius: '50%',
+          border: 'none',
+          cursor: 'pointer',
+          fontWeight: 'bold',
+          width: '50px',
+          height: '50px',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center'
+        }}
+      >
+        📊
+      </button>
+
+      {/* Bottom Sheet Stats Panel */}
+      {isStatsOpen && (
+        <div style={{
+          position: 'absolute',
+          bottom: 0,
+          left: 0,
+          right: 0,
+          backgroundColor: 'white',
+          padding: '20px',
+          borderTop: '1px solid #ccc',
+          boxShadow: '0 -2px 10px rgba(0,0,0,0.1)',
+          maxHeight: '450px',
+          overflowY: 'auto',
+          zIndex: 100
+        }}>
+          <h3>Your Stats</h3>
+          <p>Stats content here...</p>
+          <button
+            onClick={() => setIsStatsOpen(false)}
+            style={{
+              padding: '10px 20px',
+              backgroundColor: '#007bff',
+              color: 'white',
+              border: 'none',
+              borderRadius: '4px',
+              cursor: 'pointer'
+            }}
+          >
+            Close
+          </button>
         </div>
-    );
+      )}
+    </div>
+  );
 };
 
-export default MobileBottomSheet;
+export default MobileMapLayout;
