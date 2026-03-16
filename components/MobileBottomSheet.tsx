@@ -1,1 +1,28 @@
-import React, { useState } from 'react';\n\nconst MobileBottomSheet = () => {\n    const [isOpen, setIsOpen] = useState(false);\n\n    const togglePanel = () => {\n        setIsOpen(!isOpen);\n    };\n\n    return (\n        <div style={{ position: 'fixed', bottom: '0', left: '0', right: '0', zIndex: 1000 }}>\n            <div style={{ display: isOpen ? 'block' : 'none', background: 'white', padding: '10px', borderTop: '1px solid #ccc' }}>\n                <div style={{ display: 'flex', justifyContent: 'space-between' }}>\n                    <div><strong>Stats:</strong> Sample Stats Here</div>\n                    <div>\n                        <button onClick={() => alert('Action 1')}>Action 1</button>\n                        <button onClick={() => alert('Action 2')}>Action 2</button>\n                    </div>\n                </div>\n            </div>\n            <button onClick={togglePanel} style={{ width: '100%', padding: '10px', background: '#007bff', color: 'white', border: 'none' }}>\n                {isOpen ? 'Hide' : 'Show'} Bottom Panel\n            </button>\n        </div>\n    );\n};\n\nexport default MobileBottomSheet;
+import React, { useState } from 'react';
+
+const MobileBottomSheet = () => {
+    const [isOpen, setIsOpen] = useState(false);
+
+    const togglePanel = () => {
+        setIsOpen(!isOpen);
+    };
+
+    return (
+        <div style={{ position: 'fixed', bottom: '0', left: '0', right: '0', zIndex: 1000 }}>
+            <div style={{ display: isOpen ? 'block' : 'none', background: 'white', padding: '10px', borderTop: '1px solid #ccc' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                    <div><strong>Stats:</strong> Sample Stats Here</div>
+                    <div>
+                        <button onClick={() => alert('Action 1')}>Action 1</button>
+                        <button onClick={() => alert('Action 2')}>Action 2</button>
+                    </div>
+                </div>
+            </div>
+            <button onClick={togglePanel} style={{ width: '100%', padding: '10px', background: '#007bff', color: 'white', border: 'none' }}>
+                {isOpen ? 'Hide' : 'Show'} Bottom Panel
+            </button>
+        </div>
+    );
+};
+
+export default MobileBottomSheet;
