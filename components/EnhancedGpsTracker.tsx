@@ -1,54 +1,139 @@
-// EnhancedGpsTracker.tsx
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
+
+interface GpsData {
+    latitude: number;
+    longitude: number;
+    accuracy: number;
+    heading?: number;
+    filteredLatitude: number;
+    filteredLongitude: number;
+}
+
+interface KalmanState {
+    x: number;
+    y: number;
+    px: number;
+    py: number;
+}
 
 const EnhancedGpsTracker = () => {
-    const [location, setLocation] = useState({
-        latitude: null,
-        longitude: null,
-        heading: null,
+    const gpsDataRef = useRef<GpsData>({
+        latitude: 0,
+        longitude: 0,
+        accuracy: 0,
+        heading: undefined,
+        filteredLatitude: 0,
+        filteredLongitude: 0,
     });
 
-    // Kalman filter variables
-    let q = 0.01, r = 0.1;
-    let xhat = 0, p = 1, k = 0;
+    const kalmanStateRef = useRef<KalmanState>({
+        x: 0,
+        y: 0,
+        px: 0.1,
+        py: 0.1,
+    });
 
-    const kalmanFilter = (measurement) => {
-        // Prediction
-        p += q;
-        // Measurement update
-        k = p / (p + r);
-        xhat += k * (measurement - xhat);
-        p *= (1 - k);
-        return xhat;
+    const previousCoordsRef = useRef<{ lat: number; lon: number } | null>(null);
+    const watchIdRef = useRef<number | null>(null);
+
+    const [gpsData, setGpsData] = useState<GpsData>(gpsDataRef.current);
+
+    const applyKalmanFilter = (
+        measurement: { lat: number; lon: number },
+        accuracy: number
+    ): { lat: number; lon: number } => {
+        const state = kalmanStateRef.current;
+        const q = 0.00001;
+        const r = Math.max(accuracy * accuracy, 1);
+        const px = state.px + q;
+        const py = state.py + q;
+        const kx = px / (px + r);
+        const ky = py / (py + r);
+        state.x = state.x + kx * (measurement.lat - state.x);
+        state.y = state.y + ky * (measurement.lon - state.y);
+        state.px = (1 - kx) * px;
+        state.py = (1 - ky) * py;
+        return { lat: state.x, lon: state.y };
+    };
+
+    const calculateHeading = (
+        lat1: number,
+        lon1: number,
+        lat2: number,
+        lon2: number
+    ): number => {
+        const dLon = lon2 - lon1;
+        const y = Math.sin(dLon) * Math.cos(lat2);
+        const x = Math.cos(lat1) * Math.sin(lat2) - Math.sin(lat1) * Math.cos(lat2) * Math.cos(dLon);
+        const heading = Math.atan2(y, x);
+        return ((heading * 180) / Math.PI + 360) % 360;
     };
 
     useEffect(() => {
-        const handleSuccess = (position) => {
-            const { latitude, longitude } = position.coords;
-            const heading = position.coords.heading;
-            // Apply Kalman filter to the obtained latitude and longitude
-            const filteredLatitude = kalmanFilter(latitude);
-            const filteredLongitude = kalmanFilter(longitude);
-            setLocation({
-                latitude: filteredLatitude,
-                longitude: filteredLongitude,
+        const handleGPSUpdate = (event: GeolocationPosition) => {
+            const { latitude, longitude, accuracy } = event.coords;
+            const filtered = applyKalmanFilter({ lat: latitude, lon: longitude }, accuracy);
+            let heading: number | undefined;
+
+            if (previousCoordsRef.current) {
+                heading = calculateHeading(
+                    previousCoordsRef.current.lat,
+                    previousCoordsRef.current.lon,
+                    latitude,
+                    longitude
+                );
+            }
+
+            previousCoordsRef.current = { lat: latitude, lon: longitude };
+            gpsDataRef.current = {
+                latitude,
+                longitude,
+                accuracy,
                 heading,
-            });
+                filteredLatitude: filtered.lat,
+                filteredLongitude: filtered.lon,
+            };
+
+            setGpsData({ ...gpsDataRef.current });
         };
 
-        const handleError = (error) => {
-            console.error('Error obtaining location:', error);
+        const handleGPSError = (error: GeolocationPositionError) => {
+            console.error('Error getting GPS data:', error.message);
         };
 
-        navigator.geolocation.watchPosition(handleSuccess, handleError);
+        watchIdRef.current = navigator.geolocation.watchPosition(
+            handleGPSUpdate,
+            handleGPSError,
+            { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+        );
+
+        return () => {
+            if (watchIdRef.current !== null) {
+                navigator.geolocation.clearWatch(watchIdRef.current);
+            }
+        };
     }, []);
 
     return (
-        <div>
-            <h1>Enhanced GPS Tracker</h1>
-            <p>Latitude: {location.latitude}</p>
-            <p>Longitude: {location.longitude}</p>
-            <p>Heading: {location.heading}</p>
+        <div style={{ padding: '20px', fontFamily: 'Arial, sans-serif' }}>
+            <h2>Enhanced GPS Tracker</h2>
+            <div style={{ marginBottom: '10px' }}>
+                <h3>Raw GPS Data:</h3>
+                <p>Latitude: {gpsData.latitude.toFixed(6)}°</p>
+                <p>Longitude: {gpsData.longitude.toFixed(6)}°</p>
+                <p>Accuracy: ±{gpsData.accuracy.toFixed(2)} meters</p>
+            </div>
+            <div style={{ marginBottom: '10px' }}>
+                <h3>Filtered GPS Data (Kalman):</h3>
+                <p>Latitude: {gpsData.filteredLatitude.toFixed(6)}°</p>
+                <p>Longitude: {gpsData.filteredLongitude.toFixed(6)}°</p>
+            </div>
+            {gpsData.heading !== undefined && (
+                <div>
+                    <h3>Navigation:</h3>
+                    <p>Heading: {gpsData.heading.toFixed(2)}° from North</p>
+                </div>
+            )}
         </div>
     );
 };
