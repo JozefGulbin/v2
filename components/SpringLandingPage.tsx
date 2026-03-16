@@ -1,47 +1,41 @@
 import React, { useState } from 'react';
 
-const SpringLandingPage = () => {
+interface SpringLandingPageProps {
+  onEikime: () => void;
+  onMarsrutai: () => void;
+  onSos: () => void;
+}
+
+const SpringLandingPage = ({ onEikime, onMarsrutai, onSos }: SpringLandingPageProps) => {
   const [activeTab, setActiveTab] = useState<'eikime' | 'marsrutai' | 'sos'>('eikime');
 
   return (
     <div style={{
-      minHeight: '100vh',
+      position: 'absolute',
+      inset: '0',
+      zIndex: '5000',
+      background: 'linear-gradient(to bottom right, #dcfce7, #f0fdf4, #ffffff)',
       display: 'flex',
+      flexDirection: 'column',
       alignItems: 'center',
       justifyContent: 'center',
-      backgroundColor: '#E8F5E9',
-      position: 'relative',
-      fontFamily: 'Arial, sans-serif',
-      overflow: 'hidden',
-      padding: '20px'
+      padding: '32px',
+      overflow: 'auto'
     }}>
-      {/* Floating Spring Flowers Background */}
-      {[...Array(15)].map((_, i) => (
-        <div key={i} style={{
-          position: 'absolute',
-          fontSize: `${30 + Math.random() * 20}px`,
-          opacity: 0.5,
-          animation: `float ${4 + Math.random() * 4}s ease-in-out infinite`,
-          top: `${Math.random() * 100}%`,
-          left: `${Math.random() * 100}%`
-        }}>
-          🌸
-        </div>
-      ))}
-
       {/* Main Card - Width 2, Height 4 (tall block) */}
       <div style={{
         backgroundColor: 'white',
-        borderRadius: '20px',
-        boxShadow: '0 20px 60px rgba(0,0,0,0.15)',
+        borderRadius: '72px',
+        boxShadow: '0 25px 50px -12px rgba(0,0,0,0.15)',
         width: '100%',
         maxWidth: '400px',
         aspectRatio: '1 / 2',
         display: 'flex',
         flexDirection: 'column',
         padding: '30px',
-        zIndex: 10,
-        position: 'relative'
+        zIndex: '10',
+        position: 'relative',
+        border: '4px solid white'
       }}>
         {/* Header */}
         <div style={{
@@ -50,7 +44,7 @@ const SpringLandingPage = () => {
         }}>
           <h1 style={{
             fontSize: '36px',
-            color: '#1976D2',
+            color: '#16a34a',
             margin: '0 0 10px 0',
             fontWeight: 'bold'
           }}>
@@ -147,7 +141,7 @@ const SpringLandingPage = () => {
               <p style={{ color: '#999', fontSize: '14px', marginBottom: '25px' }}>
                 Pin your current location and start walking, cycling, or driving
               </p>
-              <button style={{
+              <button onClick={onEikime} style={{
                 width: '100%',
                 padding: '15px',
                 backgroundColor: '#4CAF50',
@@ -183,7 +177,7 @@ const SpringLandingPage = () => {
               <p style={{ color: '#999', fontSize: '14px', marginBottom: '25px' }}>
                 View trails you've recorded and uploaded for future adventures
               </p>
-              <button style={{
+              <button onClick={onMarsrutai} style={{
                 width: '100%',
                 padding: '15px',
                 backgroundColor: '#2196F3',
@@ -229,7 +223,7 @@ const SpringLandingPage = () => {
               }}>
                 📍 Your location will be sent to your configured contacts
               </div>
-              <button style={{
+              <button onClick={onSos} style={{
                 width: '100%',
                 padding: '15px',
                 backgroundColor: '#FF5252',
@@ -269,7 +263,6 @@ const SpringLandingPage = () => {
         </div>
       </div>
 
-      {/* Float Animation */}
       <style>{`
         @keyframes float {
           0%, 100% { transform: translateY(0px) rotate(0deg); }
