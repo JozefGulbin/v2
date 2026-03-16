@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from "react";
 import Head from 'next/head';
 import LostView from "@/components/LostView";
 import ElderlyKidFriendlyNav from "@/components/ElderlyKidFriendlyNav";
+import SpringLandingPage from "@/components/SpringLandingPage";
 
 /**
  * TAPUTAPU v12.3 - SPRING EDITION (UPGRADED)
@@ -307,6 +308,7 @@ export default function MapPage() {
         <title>TapuTapu v12.3 Spring Edition</title>
         <style>{`
           @keyframes flowerpetal { 0% { transform: translateY(-10vh) translateX(0) rotate(0deg); } 100% { transform: translateY(110vh) translateX(20px) rotate(360deg); } }
+          @keyframes float { 0%, 100% { transform: translateY(0px) rotate(0deg); } 50% { transform: translateY(-30px) rotate(15deg); } }
           .flower-petal { position: absolute; color: #ffb6c1; user-select: none; z-index: 9999; pointer-events: none; font-size: 1.8rem; animation: flowerpetal 12s linear infinite; opacity: 0.8; }
           .marker-pin { width: 40px; height: 40px; background: #0f172a; border: 3px solid white; border-radius: 50% 50% 50% 0; transform: rotate(-45deg); display: flex; align-items: center; justify-content: center; color: white; font-weight: 800; font-size: 16px; box-shadow: 0 4px 10px rgba(0,0,0,0.3); }
           .marker-pin > * { transform: rotate(45deg); }
@@ -322,25 +324,13 @@ export default function MapPage() {
       {/* MAP CONTAINER */}
       <div ref={mapContainerRef} className="absolute top-1/2 left-1/2 z-0 w-[400vw] h-[400vh]" style={{ transform: `translate(-50%, -50%) rotate(0deg)`, transformOrigin: 'center center', willChange: 'transform' }} />
 
-      {/* LANDING VIEW (Spring Theme) */}
+      {/* LANDING VIEW - NOW USING SPRINGLANDINGPAGE COMPONENT */}
       {viewMode === 'landing' && (
-        <div className="absolute inset-0 z-[5000] bg-gradient-to-br from-green-200 via-emerald-50 to-white flex flex-col items-center justify-center p-8 overflow-y-auto no-scrollbar">
-           <div className="w-full max-w-sm bg-white/70 backdrop-blur-3xl border-4 border-white rounded-[4.5rem] p-10 py-14 shadow-2xl text-center relative mt-[-8vh]">
-               <div className="w-28 h-28 bg-white rounded-full flex items-center justify-center mb-8 mx-auto shadow-xl text-6xl border-4 border-green-50">🌱</div>
-               <h1 className="text-5xl font-black text-green-600 tracking-tighter drop-shadow-sm">TapuTapu</h1>
-               <div className="bg-green-600 text-white text-[11px] font-black uppercase px-6 py-2.5 rounded-full w-max mx-auto mt-4 tracking-[0.2em] shadow-lg">Pavasario Sezona 🌸</div>
-               
-               <div className="mt-12 space-y-6">
-                   <button onClick={() => setViewMode('map')} className="w-full py-7 bg-green-500 text-white rounded-[2.5rem] font-black text-3xl shadow-xl active:scale-95 transition-all border-b-[10px] border-green-700">EIKIME!</button>
-                   <button onClick={() => setViewMode('history')} className="w-full py-6 bg-slate-500 text-white rounded-[2.5rem] font-black text-2xl shadow-xl active:scale-95 transition-all border-b-[10px] border-slate-700">MANO MARŠRUTAI</button>
-                   <button onClick={() => setViewMode('lost')} className="w-full py-4 bg-rose-500 text-white rounded-[2.5rem] font-black text-xl shadow-xl active:scale-95 transition-all border-b-[8px] border-rose-700 uppercase">Pagalbos!</button>
-               </div>
-               <div style={{ marginTop: '20px' }}>
-                 <ElderlyKidFriendlyNav />
-               </div>
-               <p className="mt-12 text-green-400 font-black text-[10px] uppercase tracking-widest opacity-40">Versija 12.3 Spring Edition</p>
-            </div>
-         </div>
+        <SpringLandingPage 
+          onEikime={() => setViewMode('map')} 
+          onMarsrutai={() => setViewMode('history')} 
+          onSos={() => setViewMode('lost')} 
+        />
       )}
 
       {/* MAP VIEW UI */}
