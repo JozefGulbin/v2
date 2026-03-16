@@ -1,57 +1,20 @@
 import React from 'react';
-import { View, StyleSheet, Button, TouchableOpacity } from 'react-native';
-import BottomSheet from 'reanimated-bottom-sheet';
+import './MobileMapLayout.css'; // Ensure you create a CSS file for styling
 
 const MobileMapLayout = () => {
-  const renderContent = () => (
-    <View style={styles.bottomSheetContent}>
-      <Text>Your stats here...</Text>
-      <Button title="Close" onPress={() => sheetRef.current.snapTo(1)} />
-    </View>
-  );
-
-  const sheetRef = React.useRef(null);
-
   return (
-    <View style={styles.container}>
-      {/* Map Component would be here */}
-      <TouchableOpacity style={styles.floatingButton} onPress={() => { /* SOS functionality */ }}>
-        <Text>SOS</Text>
-      </TouchableOpacity>
-      <TouchableOpacity style={styles.floatingButton} onPress={() => { /* GPS recenter functionality */ }}>
-        <Text>GPS</Text>
-      </TouchableOpacity>
-      <TouchableOpacity style={styles.floatingButton} onPress={() => sheetRef.current.snapTo(0)}>
-        <Text>Stats</Text>
-      </TouchableOpacity>
-      <BottomSheet
-        ref={sheetRef}
-        snapPoints={[450, 0]}
-        renderContent={renderContent}
-        initialSnap={1}
-      />
-    </View>
+    <div className="map-container">
+      <div className="floating-buttons">
+        <button className="button sos">SOS</button>
+        <button className="button gps">GPS</button>
+        <button className="button stats">Stats</button>
+      </div>
+      <div className="bottom-sheet panel">
+        <h2>Bottom Sheet Panel</h2>
+        <p>Some content goes here.</p>
+      </div>
+    </div>
   );
 };
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    position: 'relative',
-  },
-  floatingButton: {
-    position: 'absolute',
-    bottom: 90,
-    right: 20,
-    backgroundColor: '#f0c14b',
-    padding: 10,
-    borderRadius: 50,
-  },
-  bottomSheetContent: {
-    backgroundColor: 'white',
-    padding: 20,
-    height: 450,
-  },
-});
 
 export default MobileMapLayout;
