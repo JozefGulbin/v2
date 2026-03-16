@@ -14,17 +14,40 @@ const SpringLandingPage = ({ onEikime, onMarsrutai, onSos }: SpringLandingPagePr
       position: 'absolute',
       inset: '0',
       zIndex: '5000',
-      background: 'linear-gradient(to bottom right, #dcfce7, #f0fdf4, #ffffff)',
+      background: 'linear-gradient(135deg, #FFF9E6 0%, #FFE6F0 25%, #E8F5E9 50%, #E0F7FA 75%, #F3E5F5 100%)',
       display: 'flex',
       flexDirection: 'column',
       alignItems: 'center',
       justifyContent: 'center',
       padding: '32px',
-      overflow: 'auto'
+      overflow: 'auto',
+      position: 'relative'
     }}>
+      {/* Floating Spring Elements - BACKGROUND */}
+      <div style={{ position: 'absolute', top: '5%', left: '5%', fontSize: '60px', opacity: 0.4, animation: 'float 6s ease-in-out infinite' }}>🌸</div>
+      <div style={{ position: 'absolute', top: '10%', right: '8%', fontSize: '50px', opacity: 0.35, animation: 'float 7s ease-in-out infinite' }}>🌼</div>
+      <div style={{ position: 'absolute', top: '20%', left: '12%', fontSize: '55px', opacity: 0.4, animation: 'float 5s ease-in-out infinite' }}>🌸</div>
+      <div style={{ position: 'absolute', top: '15%', right: '15%', fontSize: '45px', opacity: 0.35, animation: 'float 8s ease-in-out infinite' }}>🦋</div>
+      <div style={{ position: 'absolute', top: '35%', left: '8%', fontSize: '50px', opacity: 0.4, animation: 'float 6.5s ease-in-out infinite' }}>🌼</div>
+      <div style={{ position: 'absolute', top: '30%', right: '10%', fontSize: '55px', opacity: 0.35, animation: 'float 7.5s ease-in-out infinite' }}>🌸</div>
+      <div style={{ position: 'absolute', bottom: '25%', left: '10%', fontSize: '60px', opacity: 0.4, animation: 'float 5.5s ease-in-out infinite' }}>🌼</div>
+      <div style={{ position: 'absolute', bottom: '20%', right: '12%', fontSize: '50px', opacity: 0.35, animation: 'float 7s ease-in-out infinite' }}>🦋</div>
+      <div style={{ position: 'absolute', bottom: '10%', left: '15%', fontSize: '55px', opacity: 0.4, animation: 'float 8.5s ease-in-out infinite' }}>🌸</div>
+      <div style={{ position: 'absolute', bottom: '15%', right: '8%', fontSize: '45px', opacity: 0.35, animation: 'float 6s ease-in-out infinite' }}>🌼</div>
+      <div style={{ position: 'absolute', top: '50%', left: '3%', fontSize: '50px', opacity: 0.3, animation: 'float 9s ease-in-out infinite' }}>🦋</div>
+      <div style={{ position: 'absolute', top: '60%', right: '5%', fontSize: '55px', opacity: 0.35, animation: 'float 5.5s ease-in-out infinite' }}>🌸</div>
+      <div style={{ position: 'absolute', top: '45%', right: '20%', fontSize: '45px', opacity: 0.3, animation: 'float 7s ease-in-out infinite' }}>🌼</div>
+      <div style={{ position: 'absolute', bottom: '35%', left: '20%', fontSize: '50px', opacity: 0.35, animation: 'float 8s ease-in-out infinite' }}>🦋</div>
+      <div style={{ position: 'absolute', top: '25%', left: '85%', fontSize: '55px', opacity: 0.4, animation: 'float 6s ease-in-out infinite' }}>🌸</div>
+      <div style={{ position: 'absolute', bottom: '30%', left: '88%', fontSize: '50px', opacity: 0.35, animation: 'float 7.5s ease-in-out infinite' }}>🌼</div>
+
+      {/* Sun decoration */}
+      <div style={{ position: 'absolute', top: '3%', right: '3%', fontSize: '70px', opacity: 0.15 }}>☀️</div>
+
       {/* Main Card - Width 2, Height 4 (tall block) */}
       <div style={{
-        backgroundColor: 'white',
+        backgroundColor: 'rgba(255, 255, 255, 0.92)',
+        backdropFilter: 'blur(10px)',
         borderRadius: '72px',
         boxShadow: '0 25px 50px -12px rgba(0,0,0,0.15)',
         width: '100%',
@@ -40,48 +63,59 @@ const SpringLandingPage = ({ onEikime, onMarsrutai, onSos }: SpringLandingPagePr
         {/* Header */}
         <div style={{
           textAlign: 'center',
-          marginBottom: '30px'
+          marginBottom: '25px'
         }}>
           <h1 style={{
-            fontSize: '36px',
+            fontSize: '48px',
             color: '#16a34a',
-            margin: '0 0 10px 0',
-            fontWeight: 'bold'
+            margin: '0 0 5px 0',
+            fontWeight: 'bold',
+            textShadow: '0 2px 4px rgba(0,0,0,0.1)'
           }}>
             🌱 TapuTapu
           </h1>
           <div style={{
-            fontSize: '14px',
-            color: '#7CB342',
+            fontSize: '16px',
+            color: '#fff',
             fontWeight: 'bold',
-            letterSpacing: '1px'
+            letterSpacing: '2px',
+            backgroundColor: 'linear-gradient(135deg, #7cb342, #4caf50)',
+            backgroundImage: 'linear-gradient(135deg, #7cb342, #4caf50)',
+            padding: '8px 16px',
+            borderRadius: '20px',
+            display: 'inline-block',
+            boxShadow: '0 4px 12px rgba(76, 175, 80, 0.3)',
+            marginTop: '10px'
           }}>
-            PAVASARIO SEZONA
+            ✿ PAVASARIO SEZONA ✿
           </div>
         </div>
 
         {/* Mini Tabs */}
         <div style={{
           display: 'flex',
-          gap: '10px',
-          marginBottom: '25px',
-          borderBottom: '2px solid #E0E0E0'
+          gap: '8px',
+          marginBottom: '20px',
+          borderBottom: '3px solid #E0E0E0',
+          paddingBottom: '10px'
         }}>
           {/* EIKIME Tab */}
           <button
             onClick={() => setActiveTab('eikime')}
             style={{
               flex: 1,
-              padding: '12px',
+              padding: '14px 10px',
               border: 'none',
-              background: activeTab === 'eikime' ? '#4CAF50' : 'transparent',
-              color: activeTab === 'eikime' ? 'white' : '#666',
-              fontSize: '14px',
+              background: activeTab === 'eikime' ? 'linear-gradient(135deg, #4CAF50, #45a049)' : 'transparent',
+              color: activeTab === 'eikime' ? 'white' : '#888',
+              fontSize: '15px',
               fontWeight: 'bold',
               cursor: 'pointer',
-              borderRadius: '8px 8px 0 0',
-              transition: 'all 0.3s',
-              textAlign: 'center'
+              borderRadius: '12px 12px 0 0',
+              transition: 'all 0.3s ease',
+              textAlign: 'center',
+              boxShadow: activeTab === 'eikime' ? '0 4px 12px rgba(76, 175, 80, 0.3)' : 'none',
+              transform: activeTab === 'eikime' ? 'scale(1.05)' : 'scale(1)'
             }}
           >
             📍 EIKIME
@@ -92,16 +126,18 @@ const SpringLandingPage = ({ onEikime, onMarsrutai, onSos }: SpringLandingPagePr
             onClick={() => setActiveTab('marsrutai')}
             style={{
               flex: 1,
-              padding: '12px',
+              padding: '14px 10px',
               border: 'none',
-              background: activeTab === 'marsrutai' ? '#4CAF50' : 'transparent',
-              color: activeTab === 'marsrutai' ? 'white' : '#666',
-              fontSize: '14px',
+              background: activeTab === 'marsrutai' ? 'linear-gradient(135deg, #4CAF50, #45a049)' : 'transparent',
+              color: activeTab === 'marsrutai' ? 'white' : '#888',
+              fontSize: '15px',
               fontWeight: 'bold',
               cursor: 'pointer',
-              borderRadius: '8px 8px 0 0',
-              transition: 'all 0.3s',
-              textAlign: 'center'
+              borderRadius: '12px 12px 0 0',
+              transition: 'all 0.3s ease',
+              textAlign: 'center',
+              boxShadow: activeTab === 'marsrutai' ? '0 4px 12px rgba(76, 175, 80, 0.3)' : 'none',
+              transform: activeTab === 'marsrutai' ? 'scale(1.05)' : 'scale(1)'
             }}
           >
             🗺️ MARŠRUTAI
@@ -112,16 +148,18 @@ const SpringLandingPage = ({ onEikime, onMarsrutai, onSos }: SpringLandingPagePr
             onClick={() => setActiveTab('sos')}
             style={{
               flex: 1,
-              padding: '12px',
+              padding: '14px 10px',
               border: 'none',
-              background: activeTab === 'sos' ? '#FF5252' : 'transparent',
-              color: activeTab === 'sos' ? 'white' : '#666',
-              fontSize: '14px',
+              background: activeTab === 'sos' ? 'linear-gradient(135deg, #FF6B9D, #FF5252)' : 'transparent',
+              color: activeTab === 'sos' ? 'white' : '#888',
+              fontSize: '15px',
               fontWeight: 'bold',
               cursor: 'pointer',
-              borderRadius: '8px 8px 0 0',
-              transition: 'all 0.3s',
-              textAlign: 'center'
+              borderRadius: '12px 12px 0 0',
+              transition: 'all 0.3s ease',
+              textAlign: 'center',
+              boxShadow: activeTab === 'sos' ? '0 4px 12px rgba(255, 82, 82, 0.3)' : 'none',
+              transform: activeTab === 'sos' ? 'scale(1.05)' : 'scale(1)'
             }}
           >
             🆘 SOS
@@ -129,38 +167,41 @@ const SpringLandingPage = ({ onEikime, onMarsrutai, onSos }: SpringLandingPagePr
         </div>
 
         {/* Tab Content */}
-        <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
           
           {/* EIKIME Content */}
           {activeTab === 'eikime' && (
-            <div style={{ textAlign: 'center', padding: '20px 0' }}>
-              <div style={{ fontSize: '48px', marginBottom: '20px' }}>📍</div>
-              <h2 style={{ color: '#333', marginBottom: '15px', fontSize: '18px' }}>
-                START YOUR JOURNEY
+            <div style={{ textAlign: 'center', padding: '20px 0', animation: 'fadeIn 0.4s ease' }}>
+              <div style={{ fontSize: '56px', marginBottom: '15px' }}>📍</div>
+              <h2 style={{ color: '#2d5016', marginBottom: '12px', fontSize: '20px', fontWeight: 'bold' }}>
+                🎉 START YOUR ADVENTURE!
               </h2>
-              <p style={{ color: '#999', fontSize: '14px', marginBottom: '25px' }}>
-                Pin your current location and start walking, cycling, or driving
+              <p style={{ color: '#7cb342', fontSize: '14px', marginBottom: '25px', lineHeight: '1.6' }}>
+                Pin your location and go on an amazing spring walk! 🚶‍♂️
               </p>
               <button onClick={onEikime} style={{
                 width: '100%',
-                padding: '15px',
+                padding: '16px',
                 backgroundColor: '#4CAF50',
                 color: 'white',
                 border: 'none',
-                borderRadius: '10px',
-                fontSize: '16px',
+                borderRadius: '16px',
+                fontSize: '18px',
                 fontWeight: 'bold',
                 cursor: 'pointer',
                 transition: 'all 0.3s',
-                boxShadow: '0 4px 12px rgba(76, 175, 80, 0.3)'
+                boxShadow: '0 6px 16px rgba(76, 175, 80, 0.4)',
+                fontFamily: 'Arial, sans-serif'
               }}
               onMouseEnter={(e) => {
                 e.currentTarget.style.backgroundColor = '#45a049';
-                e.currentTarget.style.transform = 'translateY(-2px)';
+                e.currentTarget.style.transform = 'translateY(-3px)';
+                e.currentTarget.style.boxShadow = '0 8px 20px rgba(76, 175, 80, 0.5)';
               }}
               onMouseLeave={(e) => {
                 e.currentTarget.style.backgroundColor = '#4CAF50';
                 e.currentTarget.style.transform = 'translateY(0)';
+                e.currentTarget.style.boxShadow = '0 6px 16px rgba(76, 175, 80, 0.4)';
               }}>
                 📍 PIN MY LOCATION
               </button>
@@ -169,82 +210,90 @@ const SpringLandingPage = ({ onEikime, onMarsrutai, onSos }: SpringLandingPagePr
 
           {/* MANO MARŠRUTAI Content */}
           {activeTab === 'marsrutai' && (
-            <div style={{ textAlign: 'center', padding: '20px 0' }}>
-              <div style={{ fontSize: '48px', marginBottom: '20px' }}>🗺️</div>
-              <h2 style={{ color: '#333', marginBottom: '15px', fontSize: '18px' }}>
-                MY HIKING TRAILS
+            <div style={{ textAlign: 'center', padding: '20px 0', animation: 'fadeIn 0.4s ease' }}>
+              <div style={{ fontSize: '56px', marginBottom: '15px' }}>🗺️</div>
+              <h2 style={{ color: '#2d5016', marginBottom: '12px', fontSize: '20px', fontWeight: 'bold' }}>
+                🌿 MY TRAIL COLLECTION
               </h2>
-              <p style={{ color: '#999', fontSize: '14px', marginBottom: '25px' }}>
-                View trails you've recorded and uploaded for future adventures
+              <p style={{ color: '#7cb342', fontSize: '14px', marginBottom: '25px', lineHeight: '1.6' }}>
+                View all the exciting trails you've discovered and recorded! 🌲
               </p>
               <button onClick={onMarsrutai} style={{
                 width: '100%',
-                padding: '15px',
-                backgroundColor: '#2196F3',
+                padding: '16px',
+                backgroundColor: '#66BB6A',
                 color: 'white',
                 border: 'none',
-                borderRadius: '10px',
-                fontSize: '16px',
+                borderRadius: '16px',
+                fontSize: '18px',
                 fontWeight: 'bold',
                 cursor: 'pointer',
                 transition: 'all 0.3s',
-                boxShadow: '0 4px 12px rgba(33, 150, 243, 0.3)'
+                boxShadow: '0 6px 16px rgba(102, 187, 106, 0.4)',
+                fontFamily: 'Arial, sans-serif'
               }}
               onMouseEnter={(e) => {
-                e.currentTarget.style.backgroundColor = '#1976D2';
-                e.currentTarget.style.transform = 'translateY(-2px)';
+                e.currentTarget.style.backgroundColor = '#4CAF50';
+                e.currentTarget.style.transform = 'translateY(-3px)';
+                e.currentTarget.style.boxShadow = '0 8px 20px rgba(76, 175, 80, 0.5)';
               }}
               onMouseLeave={(e) => {
-                e.currentTarget.style.backgroundColor = '#2196F3';
+                e.currentTarget.style.backgroundColor = '#66BB6A';
                 e.currentTarget.style.transform = 'translateY(0)';
+                e.currentTarget.style.boxShadow = '0 6px 16px rgba(102, 187, 106, 0.4)';
               }}>
-                🗺️ VIEW TRAILS
+                🗺️ VIEW MY TRAILS
               </button>
             </div>
           )}
 
           {/* SOS Content */}
           {activeTab === 'sos' && (
-            <div style={{ textAlign: 'center', padding: '20px 0' }}>
-              <div style={{ fontSize: '48px', marginBottom: '20px' }}>🆘</div>
-              <h2 style={{ color: '#333', marginBottom: '15px', fontSize: '18px' }}>
-                EMERGENCY SOS
+            <div style={{ textAlign: 'center', padding: '20px 0', animation: 'fadeIn 0.4s ease' }}>
+              <div style={{ fontSize: '56px', marginBottom: '15px' }}>🆘</div>
+              <h2 style={{ color: '#d32f2f', marginBottom: '12px', fontSize: '20px', fontWeight: 'bold' }}>
+                ⚠️ NEED HELP?
               </h2>
-              <p style={{ color: '#999', fontSize: '14px', marginBottom: '15px' }}>
-                Share your current GPS coordinates with emergency contacts
+              <p style={{ color: '#d32f2f', fontSize: '14px', marginBottom: '15px', lineHeight: '1.6' }}>
+                Share your exact location with trusted contacts instantly!
               </p>
               <div style={{
-                backgroundColor: '#FFF3E0',
-                padding: '15px',
-                borderRadius: '10px',
+                backgroundColor: '#FFEBEE',
+                padding: '12px',
+                borderRadius: '12px',
                 marginBottom: '20px',
-                fontSize: '12px',
-                color: '#E65100'
+                fontSize: '13px',
+                color: '#c62828',
+                border: '2px solid #EF5350',
+                fontWeight: 'bold'
               }}>
-                📍 Your location will be sent to your configured contacts
+                📍 Your GPS position will be sent right away
               </div>
               <button onClick={onSos} style={{
                 width: '100%',
-                padding: '15px',
+                padding: '16px',
                 backgroundColor: '#FF5252',
                 color: 'white',
                 border: 'none',
-                borderRadius: '10px',
-                fontSize: '16px',
+                borderRadius: '16px',
+                fontSize: '18px',
                 fontWeight: 'bold',
                 cursor: 'pointer',
                 transition: 'all 0.3s',
-                boxShadow: '0 4px 12px rgba(255, 82, 82, 0.3)'
+                boxShadow: '0 6px 16px rgba(255, 82, 82, 0.4)',
+                fontFamily: 'Arial, sans-serif'
               }}
               onMouseEnter={(e) => {
                 e.currentTarget.style.backgroundColor = '#E53935';
-                e.currentTarget.style.transform = 'translateY(-2px)';
+                e.currentTarget.style.transform = 'translateY(-3px)';
+                e.currentTarget.style.boxShadow = '0 8px 20px rgba(255, 82, 82, 0.5)';
               }}
               onMouseLeave={(e) => {
                 e.currentTarget.style.backgroundColor = '#FF5252';
                 e.currentTarget.style.transform = 'translateY(0)';
+                e.currentTarget.style.boxShadow = '0 6px 16px rgba(255, 82, 82, 0.4)';
               }}>
-                🆘 SEND SOS
+                🆘 SEND SOS NOW
               </button>
             </div>
           )}
@@ -253,13 +302,14 @@ const SpringLandingPage = ({ onEikime, onMarsrutai, onSos }: SpringLandingPagePr
         {/* Footer */}
         <div style={{
           textAlign: 'center',
-          fontSize: '11px',
-          color: '#CCC',
+          fontSize: '12px',
+          color: '#9CCC65',
           marginTop: 'auto',
           paddingTop: '20px',
-          borderTop: '1px solid #F0F0F0'
+          borderTop: '2px dashed #E0E0E0',
+          fontWeight: 'bold'
         }}>
-          v12.3 SPRING EDITION
+          🌿 v12.3 SPRING EDITION 🌿
         </div>
       </div>
 
@@ -267,6 +317,10 @@ const SpringLandingPage = ({ onEikime, onMarsrutai, onSos }: SpringLandingPagePr
         @keyframes float {
           0%, 100% { transform: translateY(0px) rotate(0deg); }
           50% { transform: translateY(-30px) rotate(15deg); }
+        }
+        @keyframes fadeIn {
+          from { opacity: 0; transform: translateY(10px); }
+          to { opacity: 1; transform: translateY(0); }
         }
       `}</style>
     </div>
