@@ -5,7 +5,7 @@ const EnhancedGpsTracker = () => {
     const gpsDataRef = useRef({ latitude: 0, longitude: 0, accuracy: 0 });
 
     useEffect(() => {
-        const handleGPSUpdate = (event) => {
+  const handleGPSUpdate = (event: GeolocationPositionEvent) => {
             const { latitude, longitude, accuracy } = event.coords;
             gpsDataRef.current = { latitude, longitude, accuracy };
             // Implement Kalman filter to improve accuracy
