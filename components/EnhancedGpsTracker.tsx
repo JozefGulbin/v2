@@ -35,7 +35,6 @@ const EnhancedGpsTracker = () => {
 
     const previousCoordsRef = useRef<{ lat: number; lon: number } | null>(null);
     const watchIdRef = useRef<number | null>(null);
-
     const [gpsData, setGpsData] = useState<GpsData>(gpsDataRef.current);
 
     const applyKalmanFilter = (
@@ -64,7 +63,9 @@ const EnhancedGpsTracker = () => {
     ): number => {
         const dLon = lon2 - lon1;
         const y = Math.sin(dLon) * Math.cos(lat2);
-        const x = Math.cos(lat1) * Math.sin(lat2) - Math.sin(lat1) * Math.cos(lat2) * Math.cos(dLon);
+        const x =
+            Math.cos(lat1) * Math.sin(lat2) -
+            Math.sin(lat1) * Math.cos(lat2) * Math.cos(dLon);
         const heading = Math.atan2(y, x);
         return ((heading * 180) / Math.PI + 360) % 360;
     };
@@ -72,9 +73,11 @@ const EnhancedGpsTracker = () => {
     useEffect(() => {
         const handleGPSUpdate = (event: GeolocationPosition) => {
             const { latitude, longitude, accuracy } = event.coords;
-            const filtered = applyKalmanFilter({ lat: latitude, lon: longitude }, accuracy);
+            const filtered = applyKalmanFilter(
+                { lat: latitude, lon: longitude },
+                accuracy
+            );
             let heading: number | undefined;
-
             if (previousCoordsRef.current) {
                 heading = calculateHeading(
                     previousCoordsRef.current.lat,
@@ -83,7 +86,6 @@ const EnhancedGpsTracker = () => {
                     longitude
                 );
             }
-
             previousCoordsRef.current = { lat: latitude, lon: longitude };
             gpsDataRef.current = {
                 latitude,
@@ -93,7 +95,6 @@ const EnhancedGpsTracker = () => {
                 filteredLatitude: filtered.lat,
                 filteredLongitude: filtered.lon,
             };
-
             setGpsData({ ...gpsDataRef.current });
         };
 
@@ -104,7 +105,11 @@ const EnhancedGpsTracker = () => {
         watchIdRef.current = navigator.geolocation.watchPosition(
             handleGPSUpdate,
             handleGPSError,
-            { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+            {
+                enableHighAccuracy: true,
+                timeout: 10000,
+                maximumAge: 0,
+            }
         );
 
         return () => {
