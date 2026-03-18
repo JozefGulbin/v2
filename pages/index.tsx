@@ -55,6 +55,7 @@ export default function MapPage() {
   const accuracyCircleRef = useRef<any>(null);
   const gpsWatchId = useRef<number | null>(null);
   const markerLayersRef = useRef<any[]>([]);
+  const hasInitializedRef = useRef(false);
   
   const userLocationRef = useRef<{ lat: number; lng: number, heading: number | null } | null>(null);
   const isNavigatingRef = useRef(false);
@@ -144,6 +145,17 @@ export default function MapPage() {
         const newLoc = { lat: latitude, lng: longitude, accuracy, speed, heading };
         setUserLocation(newLoc);
         updateUserMarker(newLoc);
+
+        // AUTO-START: Set a default waypoint on first GPS fix
+        if (!hasInitializedRef.current && viewMode === 'map' && mapRef.current) {
+            hasInitializedRef.current = true;
+            const defaultDest = {
+                lat: latitude + 0.004, 
+                lng: longitude + 0.005
+            };
+            setWaypoints([defaultDest]);
+            setNotification({ type: 'info', msg: '📍 Route ready! Click GO to navigate.' });
+        }
 
         if (isRecordingRef.current) {
             setRecordedPath(prev => {
@@ -336,7 +348,7 @@ export default function MapPage() {
 
         {viewMode === 'landing' && (
           <SpringLandingPage 
-            onEikime={() => setViewMode('map')} 
+            onEikime={() => { hasInitializedRef.current = false; setViewMode('map'); }} 
             onMarsrutai={() => setViewMode('history')} 
             onSos={() => setViewMode('lost')} 
           />
@@ -428,7 +440,6 @@ export default function MapPage() {
 
         {viewMode === 'navigation' && (
           <div style={{ position: 'absolute', inset: 0, zIndex: 1000, display: 'flex', flexDirection: 'column', alignItems: 'flex-start', justifyContent: 'flex-start', paddingTop: 24, paddingLeft: 24, pointerEvents: 'none' }}>
-              {/* BACK BUTTON - Top Left */}
               <button 
                 onClick={() => setViewMode('map')} 
                 style={{ 
@@ -459,7 +470,6 @@ export default function MapPage() {
                 ← 
               </button>
 
-              {/* DISTANCE & SPEED - Flat Tab Below Button */}
               <div style={{ pointerEvents: 'auto', backgroundColor: 'rgba(255,255,255,0.9)', backdropFilter: 'blur(12px)', borderRadius: 20, padding: '12px 20px', boxShadow: '0 4px 12px rgba(0,0,0,0.08)', border: '1px solid rgba(255,255,255,0.6)', marginTop: 16, display: 'flex', alignItems: 'center', gap: 20 }}>
                   <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
                       <span style={{ fontSize: 9, fontWeight: 'bold', color: '#9ca3af', textTransform: 'uppercase', letterSpacing: 0.5 }}>Distance</span>
