@@ -4,15 +4,6 @@ import LostView from "@/components/LostView";
 import ElderlyKidFriendlyNav from "@/components/ElderlyKidFriendlyNav";
 import SpringLandingPage from "@/components/SpringLandingPage";
 
-/**
- * TAPUTAPU v12.3 - SPRING EDITION (UPGRADED)
- * - Visuals: v12.3 Spring Theme with fresh colors
- * - UX: Mobile-optimized with bottom sheet & floating buttons
- * - GPS: Enhanced accuracy with Kalman filtering
- * - Accessibility: Elderly & kid-friendly navigation
- * - Logic: GPX Export + Trail Recording + History Loading
- */
-
 type ViewMode = 'landing' | 'map' | 'lost' | 'navigation' | 'history';
 type TransportMode = 'walking' | 'cycling' | 'driving';
 
@@ -98,22 +89,17 @@ export default function MapPage() {
     const initMap = async () => {
       if (typeof window === 'undefined' || !mapContainerRef.current) return;
       
-      // Wait for Leaflet to be available
       if (!(window as any).L) {
-        console.log('Leaflet not loaded yet');
         setTimeout(initMap, 100);
         return;
       }
 
       const L = (window as any).L;
       
-      if (mapRef.current) {
-        console.log('Map already initialized');
-        return;
-      }
+      if (mapRef.current) return;
 
       try {
-        console.log('Initializing Leaflet map...');
+        console.log('Initializing map...');
         const map = L.map(mapContainerRef.current, { 
           zoomControl: false, 
           attributionControl: false,
@@ -125,21 +111,25 @@ export default function MapPage() {
         map.on('click', (e: any) => {
             if (isNavigatingRef.current) return;
             if (highlightLayerRef.current) highlightLayerRef.current.remove();
-            if (isBuilderMode) setWaypoints(prev => [...prev, e.latlng]);
-            else { setWaypoints([e.latlng]); setShowSegments(false); }
+            if (isBuilderMode) {
+              setWaypoints(prev => [...prev, e.latlng]);
+              setNotification({ type: 'info', msg: `PIN ${String.fromCharCode(65 + waypoints.length)} added` });
+            }
+            else { 
+              setWaypoints([e.latlng]); 
+              setShowSegments(false);
+              setNotification({ type: 'info', msg: 'Destination set' });
+            }
         });
 
         mapRef.current = map;
         setMapLoaded(true);
-        console.log('Map initialized successfully');
+        console.log('Map initialized');
         
-        // Start GPS tracking
         startGpsTracking();
-        
-        // Locate user
         map.locate({ setView: true, maxZoom: 15, enableHighAccuracy: true });
       } catch (error) {
-        console.error('Map initialization error:', error);
+        console.error('Map error:', error);
         setNotification({ type: 'error', msg: 'Map failed to load' });
       }
     };
@@ -149,16 +139,13 @@ export default function MapPage() {
 
   const startGpsTracking = () => {
     if (!navigator.geolocation) {
-      console.error('Geolocation not available');
       setNotification({ type: 'error', msg: 'GPS not available' });
       return;
     }
 
-    console.log('Starting GPS tracking...');
-    
     const onGeoSuccess = (pos: GeolocationPosition) => {
         const { latitude, longitude, accuracy, speed, heading } = pos.coords;
-        console.log('GPS location:', latitude, longitude);
+        console.log('GPS:', latitude, longitude);
         const newLoc = { lat: latitude, lng: longitude, accuracy, speed, heading };
         setUserLocation(newLoc);
         updateUserMarker(newLoc);
@@ -186,8 +173,7 @@ export default function MapPage() {
     };
     
     const onGeoError = (error: GeolocationPositionError) => {
-      console.error('Geolocation error:', error.code, error.message);
-      setNotification({ type: 'error', msg: `GPS Error: ${error.message}` });
+      console.error('GPS error:', error.message);
     };
     
     gpsWatchId.current = navigator.geolocation.watchPosition(onGeoSuccess, onGeoError, { 
@@ -204,11 +190,11 @@ export default function MapPage() {
     
     const html = isNav 
       ? `<div class="user-marker-arrow" style="transform: rotate(${loc.heading || 0}deg); transition: transform 0.4s">
-           <div class="w-0 h-0 border-l-[12px] border-l-transparent border-r-[12px] border-r-transparent border-b-[24px] border-b-green-600 drop-shadow-lg"></div>
+           <div style="width: 0; height: 0; border-left: 12px solid transparent; border-right: 12px solid transparent; border-bottom: 24px solid #16a34a; filter: drop-shadow(0 2px 4px rgba(0,0,0,0.3));"></div>
          </div>`
       : `<div class="user-marker-circle">
-           <div class="w-6 h-6 bg-green-600 rounded-full border-4 border-white shadow-xl relative">
-              <div class="absolute inset-[-12px] bg-green-500 rounded-full animate-ping opacity-30"></div>
+           <div style="width: 24px; height: 24px; background: #16a34a; border-radius: 50%; border: 4px solid white; box-shadow: 0 4px 12px rgba(0,0,0,0.3); position: relative;">
+              <div style="position: absolute; inset: -12px; background: #22c55e; border-radius: 50%; animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite; opacity: 0.3;"></div>
            </div>
          </div>`;
 
@@ -219,7 +205,7 @@ export default function MapPage() {
       userMarkerRef.current.setIcon(L.divIcon({ className: 'bg-transparent', html, iconSize: [0, 0] }));
     }
     if (accuracyCircleRef.current) accuracyCircleRef.current.setLatLng([loc.lat, loc.lng]).setRadius(loc.accuracy);
-    else accuracyCircleRef.current = L.circle([loc.lat, loc.lng], { radius: loc.accuracy, color: '#22c55e', fillOpacity: 0.05, weight: 0 }).addTo(mapRef.current);
+    else accuracyCircleRef.current = L.circle([loc.lat, loc.lng], { radius: loc.accuracy, color: '#16a34a', fillOpacity: 0.05, weight: 0 }).addTo(mapRef.current);
   };
 
   useEffect(() => {
@@ -255,7 +241,7 @@ export default function MapPage() {
     segmentLayersRef.current.forEach(l => l.remove());
     routes.forEach((route, i) => {
         const isActive = i === selectedRouteIndex;
-        const polyline = L.polyline(route.coordinates, { color: isActive ? '#22c55e' : '#94a3b8', weight: isActive ? 10 : 7, opacity: isActive ? 0.9 : 0.6, lineCap: 'round' }).addTo(mapRef.current);
+        const polyline = L.polyline(route.coordinates, { color: isActive ? '#3b82f6' : '#93c5fd', weight: isActive ? 10 : 7, opacity: isActive ? 0.9 : 0.6, lineCap: 'round' }).addTo(mapRef.current);
         if (isActive) { polyline.bringToFront(); createSegments(route); }
         else { polyline.on('click', () => setSelectedRouteIndex(i)); }
         routePolylinesRef.current.push(polyline);
@@ -267,7 +253,7 @@ export default function MapPage() {
       latLngs.forEach((latLng, i) => {
           if (i === 0) return; 
           const letter = String.fromCharCode(65 + i - 1);
-          const icon = L.divIcon({ className: 'bg-transparent', html: `<div class="marker-pin">${letter}</div>`, iconSize: [40, 40], iconAnchor: [20, 40] });
+          const icon = L.divIcon({ className: 'bg-transparent', html: `<div style="width: 40px; height: 40px; background: #0f172a; border: 3px solid white; border-radius: 50% 50% 50% 0; transform: rotate(-45deg); display: flex; align-items: center; justify-content: center; color: white; font-weight: 800; font-size: 16px; box-shadow: 0 4px 10px rgba(0,0,0,0.3);"><span style="transform: rotate(45deg);">${letter}</span></div>`, iconSize: [40, 40], iconAnchor: [20, 40] });
           markerLayersRef.current.push(L.marker(latLng, { icon }).addTo(mapRef.current));
       });
   };
@@ -289,7 +275,7 @@ export default function MapPage() {
       if (highlightLayerRef.current) highlightLayerRef.current.remove();
       highlightLayerRef.current = L.polyline(coords, { color: '#f97316', weight: 12, opacity: 0.9, lineCap: 'round' }).addTo(mapRef.current).bringToFront();
       mapRef.current.panTo(coords[Math.floor(coords.length / 2)], { animate: true });
-      setNotification({ type: 'info', msg: `Atkarpa: ${formatDist(calcDist(coords))}` });
+      setNotification({ type: 'info', msg: `Distance: ${formatDist(calcDist(coords))}` });
   };
 
   const calcDist = (coords: any[]) => {
@@ -330,10 +316,10 @@ export default function MapPage() {
       const updated = [newSavedRoute, ...savedRoutes];
       setSavedRoutes(updated);
       localStorage.setItem('taputapu_saved_routes', JSON.stringify(updated));
-      setNotification({ type: 'info', msg: 'Maršrutas išsaugotas!' });
+      setNotification({ type: 'info', msg: 'Route saved!' });
     } else {
       setRecordedPath([]); setTotalRecordedDist(0); setRecordingStartTime(Date.now()); setIsRecording(true);
-      setNotification({ type: 'info', msg: 'Įrašymas pradėtas 🔴' });
+      setNotification({ type: 'info', msg: 'Recording started 🔴' });
     }
   };
 
@@ -346,7 +332,7 @@ export default function MapPage() {
         const poly = L.polyline(route.path, { color: '#a2e1c8', weight: 8, opacity: 0.8, lineCap: 'round', dashArray: '5, 10' }).addTo(mapRef.current);
         highlightLayerRef.current = poly;
         mapRef.current.fitBounds(poly.getBounds(), { padding: [50, 50] });
-        setNotification({ type: 'info', msg: `Kraunamas maršrutas (${route.date})` });
+        setNotification({ type: 'info', msg: `Loading route (${route.date})` });
     }, 600);
   };
 
@@ -356,19 +342,18 @@ export default function MapPage() {
         <title>TapuTapu v12.3 Spring Edition</title>
         <style>{`
           * { margin: 0; padding: 0; box-sizing: border-box; }
-          html, body { width: 100%; height: 100%; overflow: hidden !important; position: fixed; }
-          body { overflow: hidden !important; }
+          html, body { width: 100%; height: 100%; overflow: hidden !important; position: fixed !important; }
+          #__next { width: 100%; height: 100%; overflow: hidden !important; }
           @keyframes flowerpetal { 0% { transform: translateY(-10vh) translateX(0) rotate(0deg); } 100% { transform: translateY(110vh) translateX(20px) rotate(360deg); } }
+          @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
           .flower-petal { position: absolute; color: #ffb6c1; user-select: none; z-index: 9999; pointer-events: none; font-size: 1.8rem; animation: flowerpetal 12s linear infinite; opacity: 0.8; }
-          .marker-pin { width: 40px; height: 40px; background: #0f172a; border: 3px solid white; border-radius: 50% 50% 50% 0; transform: rotate(-45deg); display: flex; align-items: center; justify-content: center; color: white; font-weight: 800; font-size: 16px; box-shadow: 0 4px 10px rgba(0,0,0,0.3); }
-          .marker-pin > * { transform: rotate(45deg); }
           .no-scrollbar::-webkit-scrollbar { display: none; }
         `}</style>
       </Head>
 
       <div style={{ width: '100vw', height: '100vh', margin: 0, padding: 0, overflow: 'hidden', backgroundColor: '#f0fdf4', fontFamily: 'Arial, sans-serif', position: 'fixed', top: 0, left: 0 }}>
 
-        {/* FLOWER PETALS (SPRING THEME) */}
+        {/* FLOWER PETALS */}
         {viewMode === 'landing' && [...Array(25)].map((_, i) => (
           <div key={i} className="flower-petal" style={{ left: `${Math.random() * 100}%`, animationDelay: `${Math.random() * 12}s`, animationDuration: `${10 + Math.random() * 8}s` }}>🌸</div>
         ))}
@@ -389,7 +374,7 @@ export default function MapPage() {
         {viewMode === 'map' && (
           <>
               <div style={{ position: 'absolute', top: 32, left: 0, right: 0, zIndex: 1000, display: 'flex', justifyContent: 'center', pointerEvents: 'none', paddingLeft: 24, paddingRight: 24 }}>
-                  <div style={{ pointerEvents: 'auto', backgroundColor: 'rgba(255,255,255,0.95)', backdropFilter: 'blur(12px)', boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1)', borderRadius: 9999, padding: 10, display: 'flex', alignItems: 'center', borderWidth: 1, borderColor: 'rgba(255,255,255,0.5)', border: '1px solid rgba(255,255,255,0.5)' }}>
+                  <div style={{ pointerEvents: 'auto', backgroundColor: 'rgba(255,255,255,0.95)', backdropFilter: 'blur(12px)', boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1)', borderRadius: 9999, padding: 10, display: 'flex', alignItems: 'center', border: '1px solid rgba(255,255,255,0.5)' }}>
                      <button onClick={() => setViewMode('landing')} style={{ width: 48, height: 48, borderRadius: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 24, backgroundColor: '#f3f4f6', border: 'none', cursor: 'pointer' }}>🏠</button>
                      <div style={{ width: 1, backgroundColor: '#e5e7eb', height: 32, margin: '0 20px' }}></div>
                      <div style={{ display: 'flex', gap: 12 }}>
@@ -409,7 +394,7 @@ export default function MapPage() {
                       <span style={{ fontSize: 24, fontWeight: 'bold' }}>{isBuilderMode ? '✓' : '+'}</span>
                       <span style={{ fontSize: 8, fontWeight: 'bold', textTransform: 'uppercase' }}>PIN</span>
                   </button>
-                  <button onClick={() => mapRef.current?.locate({setView: true, maxZoom: 15})} style={{ width: 64, height: 64, backgroundColor: '#16a34a', border: '4px solid #86efac', borderRadius: 32, boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: 'white', cursor: 'pointer', transition: 'all 0.3s' }}>
+                  <button onClick={() => mapRef.current?.locate({setView: true, maxZoom: 15, enableHighAccuracy: true})} style={{ width: 64, height: 64, backgroundColor: '#16a34a', border: '4px solid #86efac', borderRadius: 32, boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: 'white', cursor: 'pointer', transition: 'all 0.3s' }}>
                       <span style={{ fontSize: 20 }}>📍</span>
                       <span style={{ fontSize: 8, fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: 0.5 }}>HERE</span>
                   </button>
@@ -419,7 +404,7 @@ export default function MapPage() {
                   <div style={{ position: 'absolute', bottom: 40, left: '50%', transform: 'translateX(-50%)', zIndex: 1000, width: '100%', maxWidth: 400, paddingLeft: 16, paddingRight: 16, pointerEvents: 'none' }}>
                       {showSegments && (
                           <div style={{ pointerEvents: 'auto', backgroundColor: 'rgba(255,255,255,0.95)', backdropFilter: 'blur(12px)', borderRadius: 48, padding: 24, boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1)', marginBottom: 16, maxHeight: '40vh', overflow: 'auto', border: '2px solid white' }}>
-                              <h3 style={{ fontWeight: 'bold', fontSize: 12, textTransform: 'uppercase', letterSpacing: 1, color: '#16a34a', marginBottom: 16 }}>Route Segments</h3>
+                              <h3 style={{ fontWeight: 'bold', fontSize: 12, textTransform: 'uppercase', letterSpacing: 1, color: '#3b82f6', marginBottom: 16 }}>Route Stops</h3>
                               <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
                                   {routes[selectedRouteIndex]?.waypointIndices?.map((idx, i) => {
                                       if (i === 0) return null;
@@ -428,8 +413,8 @@ export default function MapPage() {
                                       return (
                                           <button key={i} onClick={() => highlight(segCoords)} style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: 16, backgroundColor: '#f3f4f6', borderRadius: 16, cursor: 'pointer', transition: 'all 0.3s', border: 'none', textAlign: 'left' }}>
                                               <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-                                                  <div style={{ width: 24, height: 24, backgroundColor: '#16a34a', color: 'white', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold', fontSize: 9 }}>{String.fromCharCode(65 + i - 1)}</div>
-                                                  <span style={{ fontWeight: 'bold', color: '#6b7280', fontSize: 12, textTransform: 'uppercase' }}>Segment {i === 1 ? 'Start' : String.fromCharCode(65 + i - 2)} → {String.fromCharCode(65 + i - 1)}</span>
+                                                  <div style={{ width: 24, height: 24, backgroundColor: '#3b82f6', color: 'white', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold', fontSize: 9 }}>{String.fromCharCode(65 + i - 1)}</div>
+                                                  <span style={{ fontWeight: 'bold', color: '#6b7280', fontSize: 12, textTransform: 'uppercase' }}>Stop {String.fromCharCode(65 + i - 1)}</span>
                                               </div>
                                               <span style={{ fontWeight: 'bold', color: '#1f2937', fontSize: 14, letterSpacing: -0.5 }}>{formatDist(calcDist(segCoords))}</span>
                                           </button>
@@ -442,13 +427,13 @@ export default function MapPage() {
                           <div onClick={() => setShowSegments(!showSegments)} style={{ flex: 1, display: 'flex', flexDirection: 'column', paddingLeft: 24, cursor: 'pointer' }}>
                               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                                   <span style={{ fontSize: 24, fontWeight: 'bold', color: '#111827', letterSpacing: -1 }}>{formatTime(routes[selectedRouteIndex]?.summary.totalTime || 0)}</span>
-                                  <span style={{ fontSize: 10, fontWeight: 'bold', color: '#16a34a', backgroundColor: '#dcfce7', paddingLeft: 8, paddingRight: 8, paddingTop: 4, paddingBottom: 4, borderRadius: 9999, textTransform: 'uppercase' }}>{(routes[selectedRouteIndex]?.summary.totalDistance / 1000).toFixed(1)} km</span>
+                                  <span style={{ fontSize: 10, fontWeight: 'bold', color: '#3b82f6', backgroundColor: '#dbeafe', paddingLeft: 8, paddingRight: 8, paddingTop: 4, paddingBottom: 4, borderRadius: 9999, textTransform: 'uppercase' }}>{(routes[selectedRouteIndex]?.summary.totalDistance / 1000).toFixed(1)} km</span>
                               </div>
                               <span style={{ fontSize: 9, fontWeight: 'bold', textTransform: 'uppercase', color: '#9ca3af', letterSpacing: 1 }}>Route {showSegments ? '▲' : '▼'}</span>
                           </div>
                           <div style={{ display: 'flex', gap: 8 }}>
                               <button onClick={() => { setWaypoints([]); setRoutes([]); setShowSegments(false); }} style={{ width: 48, height: 48, borderRadius: '50%', backgroundColor: '#f3f4f6', color: '#d1d5db', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, border: 'none', cursor: 'pointer' }}>✕</button>
-                              <button onClick={() => setViewMode('navigation')} style={{ height: 64, paddingLeft: 40, paddingRight: 40, backgroundColor: '#16a34a', color: 'white', borderRadius: '50%', fontWeight: 'bold', fontSize: 18, boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1)', cursor: 'pointer', border: 'none', transition: 'all 0.3s' }}>GO</button>
+                              <button onClick={() => { setViewMode('navigation'); destinationRef.current = waypoints[waypoints.length - 1]; }} style={{ height: 64, paddingLeft: 40, paddingRight: 40, backgroundColor: '#3b82f6', color: 'white', borderRadius: '50%', fontWeight: 'bold', fontSize: 18, boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1)', cursor: 'pointer', border: 'none', transition: 'all 0.3s' }}>GO</button>
                           </div>
                       </div>
                   </div>
@@ -494,13 +479,6 @@ export default function MapPage() {
               {notification.msg}
           </div>
         )}
-
-        <style>{`
-          @keyframes pulse {
-            0%, 100% { opacity: 1; }
-            50% { opacity: 0.5; }
-          }
-        `}</style>
       </div>
     </>
   );
