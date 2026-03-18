@@ -52,6 +52,7 @@ export default function MapPage() {
   const [recordedPath, setRecordedPath] = useState<{lat: number, lng: number}[]>([]);
   const [totalRecordedDist, setTotalRecordedDist] = useState(0);
   const [recordingStartTime, setRecordingStartTime] = useState<number | null>(null);
+  const [mapLoaded, setMapLoaded] = useState(false);
 
   const mapRef = useRef<any>(null);
   const mapContainerRef = useRef<HTMLDivElement>(null);
@@ -90,16 +91,35 @@ export default function MapPage() {
       }
   }, [viewMode]);
 
+  // Initialize map when switching to map view
   useEffect(() => {
-      let intervalId: any = null;
-      const initMap = () => {
-        if (typeof window === 'undefined' || !mapContainerRef.current) return;
-        const L = (window as any).L;
-        if (!L || !L.Routing) return;
-        if (intervalId) clearInterval(intervalId);
-        if (mapRef.current) return;
+    if (viewMode !== 'map' || mapLoaded) return;
 
-        const map = L.map(mapContainerRef.current, { zoomControl: false, attributionControl: false }).setView([54.6872, 25.2797], 15);
+    const initMap = async () => {
+      if (typeof window === 'undefined' || !mapContainerRef.current) return;
+      
+      // Wait for Leaflet to be available
+      if (!(window as any).L) {
+        console.log('Leaflet not loaded yet');
+        setTimeout(initMap, 100);
+        return;
+      }
+
+      const L = (window as any).L;
+      
+      if (mapRef.current) {
+        console.log('Map already initialized');
+        return;
+      }
+
+      try {
+        console.log('Initializing Leaflet map...');
+        const map = L.map(mapContainerRef.current, { 
+          zoomControl: false, 
+          attributionControl: false,
+          preferCanvas: true
+        }).setView([54.6872, 25.2797], 15);
+        
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 }).addTo(map);
 
         map.on('click', (e: any) => {
@@ -109,21 +129,36 @@ export default function MapPage() {
             else { setWaypoints([e.latlng]); setShowSegments(false); }
         });
 
-        map.locate({ setView: true, maxZoom: 15, enableHighAccuracy: true });
         mapRef.current = map;
+        setMapLoaded(true);
+        console.log('Map initialized successfully');
+        
+        // Start GPS tracking
         startGpsTracking();
-      };
-      intervalId = setInterval(initMap, 100);
-      return () => clearInterval(intervalId);
-  }, [isBuilderMode]);
+        
+        // Locate user
+        map.locate({ setView: true, maxZoom: 15, enableHighAccuracy: true });
+      } catch (error) {
+        console.error('Map initialization error:', error);
+        setNotification({ type: 'error', msg: 'Map failed to load' });
+      }
+    };
+
+    setTimeout(initMap, 500);
+  }, [viewMode, mapLoaded]);
 
   const startGpsTracking = () => {
     if (!navigator.geolocation) {
       console.error('Geolocation not available');
+      setNotification({ type: 'error', msg: 'GPS not available' });
       return;
     }
+
+    console.log('Starting GPS tracking...');
+    
     const onGeoSuccess = (pos: GeolocationPosition) => {
         const { latitude, longitude, accuracy, speed, heading } = pos.coords;
+        console.log('GPS location:', latitude, longitude);
         const newLoc = { lat: latitude, lng: longitude, accuracy, speed, heading };
         setUserLocation(newLoc);
         updateUserMarker(newLoc);
@@ -151,11 +186,15 @@ export default function MapPage() {
     };
     
     const onGeoError = (error: GeolocationPositionError) => {
-      console.error('Geolocation error:', error.message);
+      console.error('Geolocation error:', error.code, error.message);
       setNotification({ type: 'error', msg: `GPS Error: ${error.message}` });
     };
     
-    gpsWatchId.current = navigator.geolocation.watchPosition(onGeoSuccess, onGeoError, { enableHighAccuracy: true, maximumAge: 0, timeout: 5000 });
+    gpsWatchId.current = navigator.geolocation.watchPosition(onGeoSuccess, onGeoError, { 
+      enableHighAccuracy: true, 
+      maximumAge: 0, 
+      timeout: 10000 
+    });
   };
 
   const updateUserMarker = (loc: any) => {
@@ -312,12 +351,13 @@ export default function MapPage() {
   };
 
   return (
-    <div style={{ width: '100vw', height: '100vh', margin: 0, padding: 0, overflow: 'hidden', backgroundColor: '#f0fdf4', fontFamily: 'Arial, sans-serif', position: 'fixed', top: 0, left: 0 }}>
+    <>
       <Head>
         <title>TapuTapu v12.3 Spring Edition</title>
         <style>{`
           * { margin: 0; padding: 0; box-sizing: border-box; }
-          html, body { width: 100%; height: 100%; overflow: hidden; }
+          html, body { width: 100%; height: 100%; overflow: hidden !important; position: fixed; }
+          body { overflow: hidden !important; }
           @keyframes flowerpetal { 0% { transform: translateY(-10vh) translateX(0) rotate(0deg); } 100% { transform: translateY(110vh) translateX(20px) rotate(360deg); } }
           .flower-petal { position: absolute; color: #ffb6c1; user-select: none; z-index: 9999; pointer-events: none; font-size: 1.8rem; animation: flowerpetal 12s linear infinite; opacity: 0.8; }
           .marker-pin { width: 40px; height: 40px; background: #0f172a; border: 3px solid white; border-radius: 50% 50% 50% 0; transform: rotate(-45deg); display: flex; align-items: center; justify-content: center; color: white; font-weight: 800; font-size: 16px; box-shadow: 0 4px 10px rgba(0,0,0,0.3); }
@@ -326,121 +366,142 @@ export default function MapPage() {
         `}</style>
       </Head>
 
-      {/* FLOWER PETALS (SPRING THEME) */}
-      {viewMode === 'landing' && [...Array(25)].map((_, i) => (
-        <div key={i} className="flower-petal" style={{ left: `${Math.random() * 100}%`, animationDelay: `${Math.random() * 12}s`, animationDuration: `${10 + Math.random() * 8}s` }}>🌸</div>
-      ))}
+      <div style={{ width: '100vw', height: '100vh', margin: 0, padding: 0, overflow: 'hidden', backgroundColor: '#f0fdf4', fontFamily: 'Arial, sans-serif', position: 'fixed', top: 0, left: 0 }}>
 
-      {/* MAP CONTAINER */}
-      <div ref={mapContainerRef} style={{ position: 'absolute', top: '50%', left: '50%', zIndex: 0, width: '400vw', height: '400vh', transform: 'translate(-50%, -50%) rotate(0deg)', transformOrigin: 'center center', willChange: 'transform' }} />
+        {/* FLOWER PETALS (SPRING THEME) */}
+        {viewMode === 'landing' && [...Array(25)].map((_, i) => (
+          <div key={i} className="flower-petal" style={{ left: `${Math.random() * 100}%`, animationDelay: `${Math.random() * 12}s`, animationDuration: `${10 + Math.random() * 8}s` }}>🌸</div>
+        ))}
 
-      {/* LANDING VIEW - NOW USING SPRINGLANDINGPAGE COMPONENT */}
-      {viewMode === 'landing' && (
-        <SpringLandingPage 
-          onEikime={() => setViewMode('map')} 
-          onMarsrutai={() => setViewMode('history')} 
-          onSos={() => setViewMode('lost')} 
-        />
-      )}
+        {/* MAP CONTAINER */}
+        <div ref={mapContainerRef} style={{ position: 'absolute', top: '50%', left: '50%', zIndex: 0, width: '400vw', height: '400vh', transform: 'translate(-50%, -50%) rotate(0deg)', transformOrigin: 'center center', willChange: 'transform' }} />
 
-      {/* MAP VIEW UI */}
-      {viewMode === 'map' && (
-        <>
-            <div style={{ position: 'absolute', top: 32, left: 0, right: 0, zIndex: 1000, display: 'flex', justifyContent: 'center', pointerEvents: 'none', paddingLeft: 24, paddingRight: 24 }}>
-                <div style={{ pointerEvents: 'auto', backgroundColor: 'rgba(255,255,255,0.95)', backdropFilter: 'blur(12px)', boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1)', borderRadius: 9999, padding: 10, display: 'flex', alignItems: 'center', borderWidth: 1, borderColor: 'rgba(255,255,255,0.5)' }}>
-                   <button onClick={() => setViewMode('landing')} style={{ width: 48, height: 48, borderRadius: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 24, backgroundColor: '#f3f4f6', border: 'none', cursor: 'pointer' }}>🏠</button>
-                   <div style={{ width: 1, backgroundColor: '#e5e7eb', height: 32, margin: '0 20px' }}></div>
-                   <div style={{ display: 'flex', gap: 12 }}>
-                       {['walking', 'cycling', 'driving'].map((m) => (
-                           <button key={m} onClick={() => setTransportMode(m as TransportMode)} style={{ width: 48, height: 48, borderRadius: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 24, transition: 'all 0.3s', backgroundColor: transportMode === m ? '#16a34a' : 'transparent', color: transportMode === m ? 'white' : '#d1d5db', border: 'none', cursor: 'pointer', transform: transportMode === m ? 'scale(1.1) drop-shadow(0 10px 8px rgba(0,0,0,0.1))' : 'scale(1)' }}>{m === 'walking' ? '🚶' : m === 'cycling' ? '🚴' : '🚗'}</button>
-                       ))}
-                   </div>
-                </div>
-            </div>
+        {/* LANDING VIEW */}
+        {viewMode === 'landing' && (
+          <SpringLandingPage 
+            onEikime={() => setViewMode('map')} 
+            onMarsrutai={() => setViewMode('history')} 
+            onSos={() => setViewMode('lost')} 
+          />
+        )}
 
-            <div style={{ position: 'absolute', top: 128, right: 32, zIndex: 1000, display: 'flex', flexDirection: 'column', gap: 24 }}>
-                <button onClick={toggleRecording} style={{ width: 64, height: 64, borderRadius: 32, boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', transition: 'all 0.3s', borderWidth: 4, borderColor: isRecording ? '#fca5a5' : 'white', backgroundColor: isRecording ? '#dc2626' : 'white', color: isRecording ? 'white' : '#dc2626', border: `4px solid ${isRecording ? '#fca5a5' : 'white'}`, cursor: 'pointer' }}>
-                   <div style={{ width: 16, height: 16, borderRadius: '50%', backgroundColor: isRecording ? 'white' : '#dc2626', animation: isRecording ? 'pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite' : 'none' }}></div>
-                   <span style={{ fontSize: 8, marginTop: 6, fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: 0.5 }}>Rec</span>
-                </button>
-                <button onClick={() => setIsBuilderMode(!isBuilderMode)} style={{ width: 64, height: 64, borderRadius: 32, boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', borderWidth: 4, backgroundColor: isBuilderMode ? '#10b981' : 'white', color: isBuilderMode ? 'white' : '#10b981', border: `4px solid ${isBuilderMode ? '#d1fae5' : 'white'}`, cursor: 'pointer', transition: 'all 0.3s' }}>
-                    <span style={{ fontSize: 24, fontWeight: 'bold' }}>{isBuilderMode ? '✓' : '+'}</span>
-                    <span style={{ fontSize: 8, fontWeight: 'bold', textTransform: 'uppercase' }}>PIN</span>
-                </button>
-                <button onClick={() => mapRef.current?.locate({setView: true, maxZoom: 15})} style={{ width: 64, height: 64, backgroundColor: '#16a34a', borderWidth: 4, borderColor: '#86efac', borderRadius: 32, boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: 'white', cursor: 'pointer', border: '4px solid #86efac', transition: 'all 0.3s' }}>
-                    <span style={{ fontSize: 20 }}>📍</span>
-                    <span style={{ fontSize: 8, fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: 0.5 }}>HERE</span>
-                </button>
-            </div>
-
-            {routes.length > 0 && (
-                <div style={{ position: 'absolute', bottom: 40, left: '50%', transform: 'translateX(-50%)', zIndex: 1000, width: '100%', maxWidth: 400, paddingLeft: 16, paddingRight: 16, pointerEvents: 'none' }}>
-                    {showSegments && (
-                        <div style={{ pointerEvents: 'auto', backgroundColor: 'rgba(255,255,255,0.95)', backdropFilter: 'blur(12px)', borderRadius: 48, padding: 24, boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1)', marginBottom: 16, maxHeight: '40vh', overflow: 'auto', borderWidth: 2, borderColor: 'white' }}>
-                            <h3 style={{ fontWeight: 'bold', fontSize: 12, textTransform: 'uppercase', letterSpacing: 1, color: '#16a34a', marginBottom: 16 }}>Route Segments</h3>
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                                {routes[selectedRouteIndex]?.waypointIndices?.map((idx, i) => {
-                                    if (i === 0) return null;
-                                    const prevIdx = routes[selectedRouteIndex].waypointIndices[i-1];
-                                    const segCoords = routes[selectedRouteIndex].coordinates.slice(prevIdx, idx + 1);
-                                    return (
-                                        <button key={i} onClick={() => highlight(segCoords)} style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: 16, backgroundColor: '#f3f4f6', borderRadius: 16, cursor: 'pointer', transition: 'all 0.3s', border: 'none', textAlign: 'left' }}>
-                                            <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-                                                <div style={{ width: 24, height: 24, backgroundColor: '#16a34a', color: 'white', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold', fontSize: 9 }}>{String.fromCharCode(65 + i - 1)}</div>
-                                                <span style={{ fontWeight: 'bold', color: '#6b7280', fontSize: 12, textTransform: 'uppercase' }}>Segment {i === 1 ? 'Start' : String.fromCharCode(65 + i - 2)} → {String.fromCharCode(65 + i - 1)}</span>
-                                            </div>
-                                            <span style={{ fontWeight: 'bold', color: '#1f2937', fontSize: 14, letterSpacing: -0.5 }}>{formatDist(calcDist(segCoords))}</span>
-                                        </button>
-                                    );
-                                })}
-                            </div>
-                        </div>
-                    )}
-                    <div style={{ pointerEvents: 'auto', backgroundColor: 'rgba(255,255,255,0.95)', backdropFilter: 'blur(12px)', borderRadius: 56, padding: 16, boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderWidth: 2, borderColor: 'white' }}>
-                        <div onClick={() => setShowSegments(!showSegments)} style={{ flex: 1, display: 'flex', flexDirection: 'column', paddingLeft: 24, cursor: 'pointer' }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                                <span style={{ fontSize: 24, fontWeight: 'bold', color: '#111827', letterSpacing: -1 }}>{formatTime(routes[selectedRouteIndex]?.summary.totalTime || 0)}</span>
-                                <span style={{ fontSize: 10, fontWeight: 'bold', color: '#16a34a', backgroundColor: '#dcfce7', paddingLeft: 8, paddingRight: 8, paddingTop: 4, paddingBottom: 4, borderRadius: 9999, textTransform: 'uppercase' }}>{(routes[selectedRouteIndex]?.summary.totalDistance / 1000).toFixed(1)} km</span>
-                            </div>
-                            <span style={{ fontSize: 9, fontWeight: 'bold', textTransform: 'uppercase', color: '#9ca3af', letterSpacing: 1 }}>Route {showSegments ? '▲' : '▼'}</span>
-                        </div>
-                        <div style={{ display: 'flex', gap: 8 }}>
-                            <button onClick={() => { setWaypoints([]); setRoutes([]); setShowSegments(false); }} style={{ width: 48, height: 48, borderRadius: '50%', backgroundColor: '#f3f4f6', color: '#d1d5db', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, border: 'none', cursor: 'pointer' }}>✕</button>
-                            <button onClick={() => setViewMode('navigation')} style={{ height: 64, paddingLeft: 40, paddingRight: 40, backgroundColor: '#16a34a', color: 'white', borderRadius: '50%', fontWeight: 'bold', fontSize: 18, boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1)', cursor: 'pointer', border: 'none', transition: 'all 0.3s' }}>GO</button>
-                        </div>
-                    </div>
-                </div>
-            )}
-        </>
-      )}
-
-      {/* HISTORY VIEW */}
-      {viewMode === 'history' && (
-          <div style={{ position: 'absolute', inset: 0, zIndex: 5000, backgroundColor: '#f8fafc', padding: 40, overflow: 'auto' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 24, marginBottom: 48 }}>
-                  <button onClick={() => setViewMode('landing')} style={{ width: 64, height: 64, backgroundColor: 'white', borderRadius: '50%', boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 32, border: 'none', cursor: 'pointer' }}>←</button>
-                  <h1 style={{ fontSize: 32, fontWeight: 'bold', color: '#111827', letterSpacing: -1 }}>My Trails</h1>
+        {/* MAP VIEW UI */}
+        {viewMode === 'map' && (
+          <>
+              <div style={{ position: 'absolute', top: 32, left: 0, right: 0, zIndex: 1000, display: 'flex', justifyContent: 'center', pointerEvents: 'none', paddingLeft: 24, paddingRight: 24 }}>
+                  <div style={{ pointerEvents: 'auto', backgroundColor: 'rgba(255,255,255,0.95)', backdropFilter: 'blur(12px)', boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1)', borderRadius: 9999, padding: 10, display: 'flex', alignItems: 'center', borderWidth: 1, borderColor: 'rgba(255,255,255,0.5)', border: '1px solid rgba(255,255,255,0.5)' }}>
+                     <button onClick={() => setViewMode('landing')} style={{ width: 48, height: 48, borderRadius: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 24, backgroundColor: '#f3f4f6', border: 'none', cursor: 'pointer' }}>🏠</button>
+                     <div style={{ width: 1, backgroundColor: '#e5e7eb', height: 32, margin: '0 20px' }}></div>
+                     <div style={{ display: 'flex', gap: 12 }}>
+                         {['walking', 'cycling', 'driving'].map((m) => (
+                             <button key={m} onClick={() => setTransportMode(m as TransportMode)} style={{ width: 48, height: 48, borderRadius: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 24, transition: 'all 0.3s', backgroundColor: transportMode === m ? '#16a34a' : 'transparent', color: transportMode === m ? 'white' : '#d1d5db', border: 'none', cursor: 'pointer', transform: transportMode === m ? 'scale(1.1)' : 'scale(1)' }}>{m === 'walking' ? '🚶' : m === 'cycling' ? '🚴' : '🚗'}</button>
+                         ))}
+                     </div>
+                  </div>
               </div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 24, paddingBottom: 96 }}>
-                  {savedRoutes.map((route) => (
-                      <div key={route.id} style={{ backgroundColor: 'white', padding: 32, borderRadius: 56, boxShadow: '0 1px 3px 0 rgba(0, 0, 0, 0.1)', borderWidth: 2, borderColor: 'transparent', transition: 'all 0.3s', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                          <div onClick={() => loadSavedRoute(route)} style={{ display: 'flex', flexDirection: 'column', flex: 1, cursor: 'pointer' }}>
-                              <span style={{ fontWeight: 'bold', fontSize: 20, color: '#111827' }}>{route.date}</span>
-                              <span style={{ color: '#16a34a', fontSize: 12, fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: 1, marginTop: 4 }}>{(route.distance/1000).toFixed(2)} km • {route.pace} min/km</span>
+
+              <div style={{ position: 'absolute', top: 128, right: 32, zIndex: 1000, display: 'flex', flexDirection: 'column', gap: 24 }}>
+                  <button onClick={toggleRecording} style={{ width: 64, height: 64, borderRadius: 32, boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', transition: 'all 0.3s', border: `4px solid ${isRecording ? '#fca5a5' : 'white'}`, backgroundColor: isRecording ? '#dc2626' : 'white', color: isRecording ? 'white' : '#dc2626', cursor: 'pointer' }}>
+                     <div style={{ width: 16, height: 16, borderRadius: '50%', backgroundColor: isRecording ? 'white' : '#dc2626', animation: isRecording ? 'pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite' : 'none' }}></div>
+                     <span style={{ fontSize: 8, marginTop: 6, fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: 0.5 }}>Rec</span>
+                  </button>
+                  <button onClick={() => setIsBuilderMode(!isBuilderMode)} style={{ width: 64, height: 64, borderRadius: 32, boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', border: `4px solid ${isBuilderMode ? '#d1fae5' : 'white'}`, backgroundColor: isBuilderMode ? '#10b981' : 'white', color: isBuilderMode ? 'white' : '#10b981', cursor: 'pointer', transition: 'all 0.3s' }}>
+                      <span style={{ fontSize: 24, fontWeight: 'bold' }}>{isBuilderMode ? '✓' : '+'}</span>
+                      <span style={{ fontSize: 8, fontWeight: 'bold', textTransform: 'uppercase' }}>PIN</span>
+                  </button>
+                  <button onClick={() => mapRef.current?.locate({setView: true, maxZoom: 15})} style={{ width: 64, height: 64, backgroundColor: '#16a34a', border: '4px solid #86efac', borderRadius: 32, boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: 'white', cursor: 'pointer', transition: 'all 0.3s' }}>
+                      <span style={{ fontSize: 20 }}>📍</span>
+                      <span style={{ fontSize: 8, fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: 0.5 }}>HERE</span>
+                  </button>
+              </div>
+
+              {routes.length > 0 && (
+                  <div style={{ position: 'absolute', bottom: 40, left: '50%', transform: 'translateX(-50%)', zIndex: 1000, width: '100%', maxWidth: 400, paddingLeft: 16, paddingRight: 16, pointerEvents: 'none' }}>
+                      {showSegments && (
+                          <div style={{ pointerEvents: 'auto', backgroundColor: 'rgba(255,255,255,0.95)', backdropFilter: 'blur(12px)', borderRadius: 48, padding: 24, boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1)', marginBottom: 16, maxHeight: '40vh', overflow: 'auto', border: '2px solid white' }}>
+                              <h3 style={{ fontWeight: 'bold', fontSize: 12, textTransform: 'uppercase', letterSpacing: 1, color: '#16a34a', marginBottom: 16 }}>Route Segments</h3>
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                                  {routes[selectedRouteIndex]?.waypointIndices?.map((idx, i) => {
+                                      if (i === 0) return null;
+                                      const prevIdx = routes[selectedRouteIndex].waypointIndices[i-1];
+                                      const segCoords = routes[selectedRouteIndex].coordinates.slice(prevIdx, idx + 1);
+                                      return (
+                                          <button key={i} onClick={() => highlight(segCoords)} style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: 16, backgroundColor: '#f3f4f6', borderRadius: 16, cursor: 'pointer', transition: 'all 0.3s', border: 'none', textAlign: 'left' }}>
+                                              <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+                                                  <div style={{ width: 24, height: 24, backgroundColor: '#16a34a', color: 'white', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold', fontSize: 9 }}>{String.fromCharCode(65 + i - 1)}</div>
+                                                  <span style={{ fontWeight: 'bold', color: '#6b7280', fontSize: 12, textTransform: 'uppercase' }}>Segment {i === 1 ? 'Start' : String.fromCharCode(65 + i - 2)} → {String.fromCharCode(65 + i - 1)}</span>
+                                              </div>
+                                              <span style={{ fontWeight: 'bold', color: '#1f2937', fontSize: 14, letterSpacing: -0.5 }}>{formatDist(calcDist(segCoords))}</span>
+                                          </button>
+                                      );
+                                  })}
+                              </div>
                           </div>
-                          <div style={{ display: 'flex', gap: 16 }}>
-                              <button onClick={() => { const gpx = `<?xml version="1.0" encoding="UTF-8"?><gpx version="1.1" creator="TapuTapu"><trk><trkseg>${route.path.map(pt => `<trkpt lat="${pt.lat}" lon="${pt.lng}"></trkpt>`).join('')}</trkseg></trk></gpx>`; const blob = new Blob([gpx], { type: 'application/gpx+xml' }); const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href = url; a.download = `trail-${route.id}.gpx`; a.click(); setNotification({ type: 'info', msg: 'GPX saved!' }); }} style={{ width: 56, height: 56, backgroundColor: '#ecfdf5', color: '#10b981', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20, cursor: 'pointer', border: 'none' }}>💾</button>
-                              <button onClick={() => { if(confirm('Delete?')) { const u = savedRoutes.filter(r => r.id !== route.id); setSavedRoutes(u); localStorage.setItem('taputapu_saved_routes', JSON.stringify(u)); } }} style={{ width: 56, height: 56, backgroundColor: '#fef2f2', color: '#dc2626', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20, cursor: 'pointer', border: 'none' }}>🗑</button>
+                      )}
+                      <div style={{ pointerEvents: 'auto', backgroundColor: 'rgba(255,255,255,0.95)', backdropFilter: 'blur(12px)', borderRadius: 56, padding: 16, boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', border: '2px solid white' }}>
+                          <div onClick={() => setShowSegments(!showSegments)} style={{ flex: 1, display: 'flex', flexDirection: 'column', paddingLeft: 24, cursor: 'pointer' }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                  <span style={{ fontSize: 24, fontWeight: 'bold', color: '#111827', letterSpacing: -1 }}>{formatTime(routes[selectedRouteIndex]?.summary.totalTime || 0)}</span>
+                                  <span style={{ fontSize: 10, fontWeight: 'bold', color: '#16a34a', backgroundColor: '#dcfce7', paddingLeft: 8, paddingRight: 8, paddingTop: 4, paddingBottom: 4, borderRadius: 9999, textTransform: 'uppercase' }}>{(routes[selectedRouteIndex]?.summary.totalDistance / 1000).toFixed(1)} km</span>
+                              </div>
+                              <span style={{ fontSize: 9, fontWeight: 'bold', textTransform: 'uppercase', color: '#9ca3af', letterSpacing: 1 }}>Route {showSegments ? '▲' : '▼'}</span>
+                          </div>
+                          <div style={{ display: 'flex', gap: 8 }}>
+                              <button onClick={() => { setWaypoints([]); setRoutes([]); setShowSegments(false); }} style={{ width: 48, height: 48, borderRadius: '50%', backgroundColor: '#f3f4f6', color: '#d1d5db', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, border: 'none', cursor: 'pointer' }}>✕</button>
+                              <button onClick={() => setViewMode('navigation')} style={{ height: 64, paddingLeft: 40, paddingRight: 40, backgroundColor: '#16a34a', color: 'white', borderRadius: '50%', fontWeight: 'bold', fontSize: 18, boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1)', cursor: 'pointer', border: 'none', transition: 'all 0.3s' }}>GO</button>
                           </div>
                       </div>
-                  ))}
-                  {savedRoutes.length === 0 && <div style={{ textAlign: 'center', paddingTop: 160, color: '#d1d5db', fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: 1, opacity: 0.4, fontStyle: 'italic' }}>No trails yet...</div>}
-              </div>
-          </div>
-      )}
+                  </div>
+              )}
+          </>
+        )}
 
-      {/* SOS / LOST */}
-      {viewMode === 'lost' && (
-        <div style={{ position: 'absolute', inset: 0, zIndex: 7000 }}>
-            <LostView lat={userLocation?.lat || 0} lng={userLocation?.lng || 0} onClose={() => setViewMode('landing')} />
-        </div>*
+        {/* HISTORY VIEW */}
+        {viewMode === 'history' && (
+            <div style={{ position: 'absolute', inset: 0, zIndex: 5000, backgroundColor: '#f8fafc', padding: 40, overflow: 'auto' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 24, marginBottom: 48 }}>
+                    <button onClick={() => setViewMode('landing')} style={{ width: 64, height: 64, backgroundColor: 'white', borderRadius: '50%', boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 32, border: 'none', cursor: 'pointer' }}>←</button>
+                    <h1 style={{ fontSize: 32, fontWeight: 'bold', color: '#111827', letterSpacing: -1 }}>My Trails</h1>
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 24, paddingBottom: 96 }}>
+                    {savedRoutes.map((route) => (
+                        <div key={route.id} style={{ backgroundColor: 'white', padding: 32, borderRadius: 56, boxShadow: '0 1px 3px 0 rgba(0, 0, 0, 0.1)', border: '2px solid transparent', transition: 'all 0.3s', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <div onClick={() => loadSavedRoute(route)} style={{ display: 'flex', flexDirection: 'column', flex: 1, cursor: 'pointer' }}>
+                                <span style={{ fontWeight: 'bold', fontSize: 20, color: '#111827' }}>{route.date}</span>
+                                <span style={{ color: '#16a34a', fontSize: 12, fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: 1, marginTop: 4 }}>{(route.distance/1000).toFixed(2)} km • {route.pace} min/km</span>
+                            </div>
+                            <div style={{ display: 'flex', gap: 16 }}>
+                                <button onClick={() => { const gpx = `<?xml version="1.0" encoding="UTF-8"?><gpx version="1.1" creator="TapuTapu"><trk><trkseg>${route.path.map(pt => `<trkpt lat="${pt.lat}" lon="${pt.lng}"></trkpt>`).join('')}</trkseg></trk></gpx>`; const blob = new Blob([gpx], { type: 'application/gpx+xml' }); const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href = url; a.download = `trail-${route.id}.gpx`; a.click(); setNotification({ type: 'info', msg: 'GPX saved!' }); }} style={{ width: 56, height: 56, backgroundColor: '#ecfdf5', color: '#10b981', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20, cursor: 'pointer', border: 'none' }}>💾</button>
+                                <button onClick={() => { if(confirm('Delete?')) { const u = savedRoutes.filter(r => r.id !== route.id); setSavedRoutes(u); localStorage.setItem('taputapu_saved_routes', JSON.stringify(u)); } }} style={{ width: 56, height: 56, backgroundColor: '#fef2f2', color: '#dc2626', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20, cursor: 'pointer', border: 'none' }}>🗑</button>
+                            </div>
+                        </div>
+                    ))}
+                    {savedRoutes.length === 0 && <div style={{ textAlign: 'center', paddingTop: 160, color: '#d1d5db', fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: 1, opacity: 0.4, fontStyle: 'italic' }}>No trails yet...</div>}
+                </div>
+            </div>
+        )}
+
+        {/* SOS / LOST */}
+        {viewMode === 'lost' && (
+          <div style={{ position: 'absolute', inset: 0, zIndex: 7000 }}>
+              <LostView lat={userLocation?.lat || 0} lng={userLocation?.lng || 0} onClose={() => setViewMode('landing')} />
+          </div>
+        )}
+
+        {/* GLOBAL NOTIFICATION */}
+        {notification && (
+          <div style={{ position: 'absolute', top: 160, left: '50%', transform: 'translateX(-50%)', zIndex: 8000, backgroundColor: '#1f2937', color: 'white', paddingLeft: 40, paddingRight: 40, paddingTop: 20, paddingBottom: 20, borderRadius: 9999, boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1)', fontSize: 18, fontWeight: 'bold', whiteSpace: 'nowrap', border: '4px solid rgba(255,255,255,0.2)', backdropFilter: 'blur(12px)' }}>
+              {notification.msg}
+          </div>
+        )}
+
+        <style>{`
+          @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+          }
+        `}</style>
+      </div>
+    </>
+  );
+}
