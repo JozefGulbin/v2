@@ -427,51 +427,50 @@ export default function MapPage() {
         )}
 
         {viewMode === 'navigation' && (
-          <div style={{ position: 'absolute', inset: 0, zIndex: 1000, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'space-between', paddingTop: 60, paddingBottom: 100, pointerEvents: 'none' }}>
-              <div style={{ pointerEvents: 'auto', backgroundColor: 'rgba(255,255,255,0.97)', backdropFilter: 'blur(12px)', borderRadius: 48, padding: 28, boxShadow: '0 20px 40px -5px rgba(0,0,0,0.15)', border: '2px solid white', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 20 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 24 }}>
-                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-                          <span style={{ fontSize: 12, fontWeight: 'bold', color: '#9ca3af', textTransform: 'uppercase', letterSpacing: 1 }}>Distance</span>
-                          <span style={{ fontSize: 36, fontWeight: 'bold', color: '#111827', marginTop: 4 }}>{formatDist(navStats.distanceRem)}</span>
-                      </div>
-                      <div style={{ width: 2, backgroundColor: '#e5e7eb', height: 80 }}></div>
-                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-                          <span style={{ fontSize: 12, fontWeight: 'bold', color: '#9ca3af', textTransform: 'uppercase', letterSpacing: 1 }}>Speed</span>
-                          <span style={{ fontSize: 36, fontWeight: 'bold', color: '#16a34a', marginTop: 4 }}>{navStats.speed}</span>
-                          <span style={{ fontSize: 10, color: '#9ca3af', marginTop: 2 }}>km/h</span>
-                      </div>
-                  </div>
-              </div>
-
+          <div style={{ position: 'absolute', inset: 0, zIndex: 1000, display: 'flex', flexDirection: 'column', alignItems: 'flex-start', justifyContent: 'flex-start', paddingTop: 24, paddingLeft: 24, pointerEvents: 'none' }}>
+              {/* BACK BUTTON - Top Left */}
               <button 
                 onClick={() => setViewMode('map')} 
                 style={{ 
                   pointerEvents: 'auto',
-                  width: 72, 
-                  height: 72, 
-                  borderRadius: '50%', 
-                  backgroundColor: '#3b82f6', 
+                  width: 60, 
+                  height: 60, 
+                  borderRadius: '20px', 
+                  backgroundColor: '#a78bfa',
                   color: 'white', 
-                  border: '4px solid white',
-                  boxShadow: '0 10px 30px rgba(59, 130, 246, 0.4)',
+                  border: '3px solid white',
+                  boxShadow: '0 8px 20px rgba(167, 139, 250, 0.3)',
                   display: 'flex', 
                   alignItems: 'center', 
                   justifyContent: 'center',
                   cursor: 'pointer', 
                   transition: 'all 0.3s ease',
-                  fontSize: 40,
+                  fontSize: 28,
                   fontWeight: 'bold'
                 }}
                 onMouseEnter={(e) => {
-                  e.currentTarget.style.transform = 'scale(1.1)';
-                  e.currentTarget.style.boxShadow = '0 15px 40px rgba(59, 130, 246, 0.5)';
+                  e.currentTarget.style.transform = 'scale(1.08)';
+                  e.currentTarget.style.boxShadow = '0 12px 28px rgba(167, 139, 250, 0.4)';
                 }}
                 onMouseLeave={(e) => {
                   e.currentTarget.style.transform = 'scale(1)';
-                  e.currentTarget.style.boxShadow = '0 10px 30px rgba(59, 130, 246, 0.4)';
+                  e.currentTarget.style.boxShadow = '0 8px 20px rgba(167, 139, 250, 0.3)';
                 }}>
                 ← 
               </button>
+
+              {/* DISTANCE & SPEED - Flat Tab Below Button */}
+              <div style={{ pointerEvents: 'auto', backgroundColor: 'rgba(255,255,255,0.9)', backdropFilter: 'blur(12px)', borderRadius: 20, padding: '12px 20px', boxShadow: '0 4px 12px rgba(0,0,0,0.08)', border: '1px solid rgba(255,255,255,0.6)', marginTop: 16, display: 'flex', alignItems: 'center', gap: 20 }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                      <span style={{ fontSize: 9, fontWeight: 'bold', color: '#9ca3af', textTransform: 'uppercase', letterSpacing: 0.5 }}>Distance</span>
+                      <span style={{ fontSize: 18, fontWeight: 'bold', color: '#111827', marginTop: 2 }}>{formatDist(navStats.distanceRem)}</span>
+                  </div>
+                  <div style={{ width: 1, backgroundColor: '#e5e7eb', height: 50 }}></div>
+                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                      <span style={{ fontSize: 9, fontWeight: 'bold', color: '#9ca3af', textTransform: 'uppercase', letterSpacing: 0.5 }}>Speed</span>
+                      <span style={{ fontSize: 18, fontWeight: 'bold', color: '#16a34a', marginTop: 2 }}>{navStats.speed} km/h</span>
+                  </div>
+              </div>
           </div>
         )}
 
