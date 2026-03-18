@@ -171,40 +171,45 @@ const SpringLandingPage = ({ onEikime, onMarsrutai, onSos }: SpringLandingPagePr
           
           {/* EIKIME Content */}
           {activeTab === 'eikime' && (
-            <div style={{ textAlign: 'center', padding: '20px 0', animation: 'fadeIn 0.4s ease' }}>
-              <div style={{ fontSize: '56px', marginBottom: '15px' }}>📍</div>
-              <h2 style={{ color: '#2d5016', marginBottom: '12px', fontSize: '20px', fontWeight: 'bold' }}>
+            <div style={{ textAlign: 'center', padding: '20px 0', animation: 'fadeIn 0.4s ease', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 20 }}>
+              <h2 style={{ color: '#2d5016', marginBottom: '8px', fontSize: '20px', fontWeight: 'bold' }}>
                 🎉 START YOUR ADVENTURE!
               </h2>
-              <p style={{ color: '#7cb342', fontSize: '14px', marginBottom: '25px', lineHeight: '1.6' }}>
-                Pin your location and go on an amazing spring walk! 🚶‍♂️
+              <p style={{ color: '#7cb342', fontSize: '14px', marginBottom: '15px', lineHeight: '1.6' }}>
+                Tap PIRMYN! to begin your spring journey! 🚶‍♂️
               </p>
+              
+              {/* BIG PIRMYN BUTTON */}
               <button onClick={onEikime} style={{
-                width: '100%',
-                padding: '16px',
-                backgroundColor: '#4CAF50',
+                width: 160,
+                height: 160,
+                borderRadius: '50%',
+                backgroundColor: '#ec4899',
                 color: 'white',
-                border: 'none',
-                borderRadius: '16px',
-                fontSize: '18px',
-                fontWeight: 'bold',
+                border: '6px solid white',
+                boxShadow: '0 20px 60px rgba(236, 72, 153, 0.4)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
                 cursor: 'pointer',
-                transition: 'all 0.3s',
-                boxShadow: '0 6px 16px rgba(76, 175, 80, 0.4)',
-                fontFamily: 'Arial, sans-serif'
+                transition: 'all 0.3s ease',
+                fontSize: 72,
+                fontWeight: 'bold',
+                animation: 'bounce 2s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+                position: 'relative'
               }}
               onMouseEnter={(e) => {
-                e.currentTarget.style.backgroundColor = '#45a049';
-                e.currentTarget.style.transform = 'translateY(-3px)';
-                e.currentTarget.style.boxShadow = '0 8px 20px rgba(76, 175, 80, 0.5)';
+                e.currentTarget.style.transform = 'scale(1.12)';
+                e.currentTarget.style.boxShadow = '0 30px 80px rgba(236, 72, 153, 0.5)';
               }}
               onMouseLeave={(e) => {
-                e.currentTarget.style.backgroundColor = '#4CAF50';
-                e.currentTarget.style.transform = 'translateY(0)';
-                e.currentTarget.style.boxShadow = '0 6px 16px rgba(76, 175, 80, 0.4)';
+                e.currentTarget.style.transform = 'scale(1)';
+                e.currentTarget.style.boxShadow = '0 20px 60px rgba(236, 72, 153, 0.4)';
               }}>
-                📍 PIN MY LOCATION
+                ↗️
               </button>
+
+              <div style={{ fontSize: 12, color: '#9ca3af', fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: 0.5 }}>PIRMYN!</div>
             </div>
           )}
 
@@ -321,6 +326,10 @@ const SpringLandingPage = ({ onEikime, onMarsrutai, onSos }: SpringLandingPagePr
         @keyframes fadeIn {
           from { opacity: 0; transform: translateY(10px); }
           to { opacity: 1; transform: translateY(0); }
+        }
+        @keyframes bounce {
+          0%, 100% { transform: translateY(0); }
+          50% { transform: translateY(-15px); }
         }
       `}</style>
     </div>
