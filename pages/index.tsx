@@ -60,7 +60,6 @@ export default function MapPage() {
   const isNavigatingRef = useRef(false);
   const destinationRef = useRef<{ lat: number; lng: number } | null>(null);
   const isRecordingRef = useRef(false);
-  const notificationTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
     const localData = localStorage.getItem('taputapu_saved_routes');
@@ -321,7 +320,7 @@ export default function MapPage() {
           #__next { width: 100%; height: 100%; overflow: hidden !important; }
           @keyframes flowerpetal { 0% { transform: translateY(-10vh) translateX(0) rotate(0deg); } 100% { transform: translateY(110vh) translateX(20px) rotate(360deg); } }
           @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
-          @keyframes bounce { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-10px); } }
+          @keyframes bounce { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-20px); } }
           .flower-petal { position: absolute; color: #ffb6c1; user-select: none; z-index: 9999; pointer-events: none; font-size: 1.8rem; animation: flowerpetal 12s linear infinite; opacity: 0.8; }
           .no-scrollbar::-webkit-scrollbar { display: none; }
         `}</style>
@@ -433,7 +432,7 @@ export default function MapPage() {
 
         {/* NAVIGATION VIEW */}
         {viewMode === 'navigation' && (
-          <div style={{ position: 'absolute', inset: 0, zIndex: 1000, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'space-between', paddingTop: 40, paddingBottom: 80, pointerEvents: 'none' }}>
+          <div style={{ position: 'absolute', inset: 0, zIndex: 1000, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'space-between', paddingTop: 60, paddingBottom: 100, pointerEvents: 'none' }}>
               {/* TOP STATS */}
               <div style={{ pointerEvents: 'auto', backgroundColor: 'rgba(255,255,255,0.97)', backdropFilter: 'blur(12px)', borderRadius: 48, padding: 28, boxShadow: '0 20px 40px -5px rgba(0,0,0,0.15)', border: '2px solid white', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 20 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 24 }}>
@@ -451,39 +450,45 @@ export default function MapPage() {
               </div>
 
               {/* CHILDISH PIRMYN BUTTON */}
-              <div style={{ pointerEvents: 'auto', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 24 }}>
+              <div style={{ pointerEvents: 'auto', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 28 }}>
+                  <div style={{ textAlign: 'center' }}>
+                      <h2 style={{ fontSize: 32, fontWeight: 'bold', color: '#111827', marginBottom: 12, letterSpacing: -1 }}>🌸 PIRMYN! 🌸</h2>
+                      <p style={{ fontSize: 14, color: '#6b7280', fontWeight: '500' }}>Start your adventure!</p>
+                  </div>
+                  
                   <button 
                     onClick={() => setViewMode('map')} 
                     style={{ 
-                      width: 160, 
-                      height: 160, 
+                      width: 200, 
+                      height: 200, 
                       borderRadius: '50%', 
-                      backgroundColor: '#ff6b9d', 
+                      backgroundColor: '#ec4899', 
                       color: 'white', 
-                      border: '6px solid white',
-                      boxShadow: '0 20px 60px -5px rgba(255, 107, 157, 0.4)',
+                      border: '8px solid white',
+                      boxShadow: '0 25px 80px -10px rgba(236, 72, 153, 0.5)',
                       display: 'flex', 
                       alignItems: 'center', 
                       justifyContent: 'center',
                       cursor: 'pointer', 
-                      transition: 'all 0.3s',
-                      fontSize: 72,
+                      transition: 'all 0.3s ease',
+                      fontSize: 100,
                       fontWeight: 'bold',
                       position: 'relative',
-                      animation: 'bounce 2s cubic-bezier(0.4, 0, 0.6, 1) infinite'
+                      animation: 'bounce 2s cubic-bezier(0.36, 0, 0.66, 1) infinite'
                     }}
                     onMouseEnter={(e) => {
-                      e.currentTarget.style.transform = 'scale(1.1)';
-                      e.currentTarget.style.boxShadow = '0 30px 80px -5px rgba(255, 107, 157, 0.5)';
+                      e.currentTarget.style.transform = 'scale(1.15)';
+                      e.currentTarget.style.boxShadow = '0 35px 100px -10px rgba(236, 72, 153, 0.7)';
                     }}
                     onMouseLeave={(e) => {
                       e.currentTarget.style.transform = 'scale(1)';
-                      e.currentTarget.style.boxShadow = '0 20px 60px -5px rgba(255, 107, 157, 0.4)';
+                      e.currentTarget.style.boxShadow = '0 25px 80px -10px rgba(236, 72, 153, 0.5)';
                     }}>
-                    ←
+                    ↗️
                   </button>
-                  <div style={{ pointerEvents: 'auto', backgroundColor: 'rgba(255,255,255,0.97)', backdropFilter: 'blur(12px)', borderRadius: 32, padding: 20, boxShadow: '0 10px 30px -5px rgba(0,0,0,0.1)', border: '2px solid white', textAlign: 'center' }}>
-                      <span style={{ fontSize: 18, fontWeight: 'bold', color: '#111827', letterSpacing: 1 }}>Tap to go back</span>
+
+                  <div style={{ pointerEvents: 'auto', backgroundColor: 'rgba(255,255,255,0.97)', backdropFilter: 'blur(12px)', borderRadius: 40, padding: 24, boxShadow: '0 10px 30px -5px rgba(0,0,0,0.1)', border: '2px solid white', textAlign: 'center', maxWidth: 300 }}>
+                      <span style={{ fontSize: 16, fontWeight: 'bold', color: '#111827', letterSpacing: 0.5 }}>Tap the big button to go back and change destination</span>
                   </div>
               </div>
           </div>
