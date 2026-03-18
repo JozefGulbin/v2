@@ -167,12 +167,7 @@ const SpringLandingPage = ({ onEikime, onMarsrutai, onSos }: SpringLandingPagePr
           {/* EIKIME Content */}
           {activeTab === 'eikime' && (
             <div style={{ textAlign: 'center', padding: '20px 0', animation: 'fadeIn 0.4s ease', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 20 }}>
-              {/* BIG GREEN PIRMYN TEXT */}
-              <h2 style={{ color: '#16a34a', marginBottom: '8px', fontSize: 48, fontWeight: 'bold', letterSpacing: -1 }}>
-                PIRMYN!
-              </h2>
-              
-              {/* BIG PIRMYN BUTTON */}
+              {/* BIG PIRMYN BUTTON WITH BOUNCING TEXT */}
               <button onClick={onEikime} style={{
                 width: 160,
                 height: 160,
@@ -186,7 +181,7 @@ const SpringLandingPage = ({ onEikime, onMarsrutai, onSos }: SpringLandingPagePr
                 justifyContent: 'center',
                 cursor: 'pointer',
                 transition: 'all 0.3s ease',
-                fontSize: 72,
+                fontSize: 48,
                 fontWeight: 'bold',
                 animation: 'bounce 2s cubic-bezier(0.4, 0, 0.6, 1) infinite',
                 position: 'relative'
@@ -199,7 +194,7 @@ const SpringLandingPage = ({ onEikime, onMarsrutai, onSos }: SpringLandingPagePr
                 e.currentTarget.style.transform = 'scale(1)';
                 e.currentTarget.style.boxShadow = '0 20px 60px rgba(236, 72, 153, 0.4)';
               }}>
-                ↗️
+                PIRMYN!
               </button>
             </div>
           )}
