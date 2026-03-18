@@ -328,15 +328,12 @@ export default function MapPage() {
 
       <div style={{ width: '100vw', height: '100vh', margin: 0, padding: 0, overflow: 'hidden', backgroundColor: '#f0fdf4', fontFamily: 'Arial, sans-serif', position: 'fixed', top: 0, left: 0 }}>
 
-        {/* FLOWER PETALS */}
         {viewMode === 'landing' && [...Array(25)].map((_, i) => (
           <div key={i} className="flower-petal" style={{ left: `${Math.random() * 100}%`, animationDelay: `${Math.random() * 12}s`, animationDuration: `${10 + Math.random() * 8}s` }}>🌸</div>
         ))}
 
-        {/* MAP CONTAINER */}
         <div ref={mapContainerRef} style={{ position: 'absolute', top: '50%', left: '50%', zIndex: 0, width: '400vw', height: '400vh', transform: 'translate(-50%, -50%) rotate(0deg)', transformOrigin: 'center center', willChange: 'transform' }} />
 
-        {/* LANDING VIEW */}
         {viewMode === 'landing' && (
           <SpringLandingPage 
             onEikime={() => setViewMode('map')} 
@@ -345,7 +342,6 @@ export default function MapPage() {
           />
         )}
 
-        {/* MAP VIEW UI */}
         {viewMode === 'map' && (
           <>
               <div style={{ position: 'absolute', top: 32, left: 0, right: 0, zIndex: 1000, display: 'flex', justifyContent: 'center', pointerEvents: 'none', paddingLeft: 24, paddingRight: 24 }}>
@@ -430,10 +426,8 @@ export default function MapPage() {
           </>
         )}
 
-        {/* NAVIGATION VIEW */}
         {viewMode === 'navigation' && (
           <div style={{ position: 'absolute', inset: 0, zIndex: 1000, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'space-between', paddingTop: 60, paddingBottom: 100, pointerEvents: 'none' }}>
-              {/* TOP STATS */}
               <div style={{ pointerEvents: 'auto', backgroundColor: 'rgba(255,255,255,0.97)', backdropFilter: 'blur(12px)', borderRadius: 48, padding: 28, boxShadow: '0 20px 40px -5px rgba(0,0,0,0.15)', border: '2px solid white', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 20 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 24 }}>
                       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
@@ -449,7 +443,6 @@ export default function MapPage() {
                   </div>
               </div>
 
-              {/* BACK BUTTON - small with direction arrow */}
               <button 
                 onClick={() => setViewMode('map')} 
                 style={{ 
@@ -467,8 +460,7 @@ export default function MapPage() {
                   cursor: 'pointer', 
                   transition: 'all 0.3s ease',
                   fontSize: 40,
-                  fontWeight: 'bold',
-                  position: 'relative'
+                  fontWeight: 'bold'
                 }}
                 onMouseEnter={(e) => {
                   e.currentTarget.style.transform = 'scale(1.1)';
@@ -483,7 +475,6 @@ export default function MapPage() {
           </div>
         )}
 
-        {/* HISTORY VIEW */}
         {viewMode === 'history' && (
             <div style={{ position: 'absolute', inset: 0, zIndex: 5000, backgroundColor: '#f8fafc', padding: 40, overflow: 'auto' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 24, marginBottom: 48 }}>
@@ -508,13 +499,18 @@ export default function MapPage() {
             </div>
         )}
 
-        {/* SOS / LOST */}
         {viewMode === 'lost' && (
           <div style={{ position: 'absolute', inset: 0, zIndex: 7000 }}>
               <LostView lat={userLocation?.lat || 0} lng={userLocation?.lng || 0} onClose={() => setViewMode('landing')} />
           </div>
         )}
 
-        {/* GLOBAL NOTIFICATION */}
         {notification && (
-          <div style={{ position: 'absolute', top: 32, right: 120, zIndex: 8000, backgroundColor: '#1f2937', color:
+          <div style={{ position: 'absolute', top: 32, right: 120, zIndex: 8000, backgroundColor: '#1f2937', color: 'white', paddingLeft: 28, paddingRight: 28, paddingTop: 14, paddingBottom: 14, borderRadius: 9999, boxShadow: '0 10px 25px -5px rgba(0,0,0,0.2)', fontSize: 14, fontWeight: 'bold', whiteSpace: 'nowrap', border: '2px solid rgba(255,255,255,0.15)', backdropFilter: 'blur(12px)' }}>
+              {notification.msg}
+          </div>
+        )}
+      </div>
+    </>
+  );
+}
