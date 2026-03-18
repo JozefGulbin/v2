@@ -449,48 +449,37 @@ export default function MapPage() {
                   </div>
               </div>
 
-              {/* CHILDISH PIRMYN BUTTON */}
-              <div style={{ pointerEvents: 'auto', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 28 }}>
-                  <div style={{ textAlign: 'center' }}>
-                      <h2 style={{ fontSize: 32, fontWeight: 'bold', color: '#111827', marginBottom: 12, letterSpacing: -1 }}>🌸 PIRMYN! 🌸</h2>
-                      <p style={{ fontSize: 14, color: '#6b7280', fontWeight: '500' }}>Start your adventure!</p>
-                  </div>
-                  
-                  <button 
-                    onClick={() => setViewMode('map')} 
-                    style={{ 
-                      width: 200, 
-                      height: 200, 
-                      borderRadius: '50%', 
-                      backgroundColor: '#ec4899', 
-                      color: 'white', 
-                      border: '8px solid white',
-                      boxShadow: '0 25px 80px -10px rgba(236, 72, 153, 0.5)',
-                      display: 'flex', 
-                      alignItems: 'center', 
-                      justifyContent: 'center',
-                      cursor: 'pointer', 
-                      transition: 'all 0.3s ease',
-                      fontSize: 100,
-                      fontWeight: 'bold',
-                      position: 'relative',
-                      animation: 'bounce 2s cubic-bezier(0.36, 0, 0.66, 1) infinite'
-                    }}
-                    onMouseEnter={(e) => {
-                      e.currentTarget.style.transform = 'scale(1.15)';
-                      e.currentTarget.style.boxShadow = '0 35px 100px -10px rgba(236, 72, 153, 0.7)';
-                    }}
-                    onMouseLeave={(e) => {
-                      e.currentTarget.style.transform = 'scale(1)';
-                      e.currentTarget.style.boxShadow = '0 25px 80px -10px rgba(236, 72, 153, 0.5)';
-                    }}>
-                    ↗️
-                  </button>
-
-                  <div style={{ pointerEvents: 'auto', backgroundColor: 'rgba(255,255,255,0.97)', backdropFilter: 'blur(12px)', borderRadius: 40, padding: 24, boxShadow: '0 10px 30px -5px rgba(0,0,0,0.1)', border: '2px solid white', textAlign: 'center', maxWidth: 300 }}>
-                      <span style={{ fontSize: 16, fontWeight: 'bold', color: '#111827', letterSpacing: 0.5 }}>Tap the big button to go back and change destination</span>
-                  </div>
-              </div>
+              {/* BACK BUTTON - small with direction arrow */}
+              <button 
+                onClick={() => setViewMode('map')} 
+                style={{ 
+                  pointerEvents: 'auto',
+                  width: 72, 
+                  height: 72, 
+                  borderRadius: '50%', 
+                  backgroundColor: '#3b82f6', 
+                  color: 'white', 
+                  border: '4px solid white',
+                  boxShadow: '0 10px 30px rgba(59, 130, 246, 0.4)',
+                  display: 'flex', 
+                  alignItems: 'center', 
+                  justifyContent: 'center',
+                  cursor: 'pointer', 
+                  transition: 'all 0.3s ease',
+                  fontSize: 40,
+                  fontWeight: 'bold',
+                  position: 'relative'
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.transform = 'scale(1.1)';
+                  e.currentTarget.style.boxShadow = '0 15px 40px rgba(59, 130, 246, 0.5)';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.transform = 'scale(1)';
+                  e.currentTarget.style.boxShadow = '0 10px 30px rgba(59, 130, 246, 0.4)';
+                }}>
+                ← 
+              </button>
           </div>
         )}
 
@@ -528,11 +517,4 @@ export default function MapPage() {
 
         {/* GLOBAL NOTIFICATION */}
         {notification && (
-          <div style={{ position: 'absolute', top: 32, right: 120, zIndex: 8000, backgroundColor: '#1f2937', color: 'white', paddingLeft: 28, paddingRight: 28, paddingTop: 14, paddingBottom: 14, borderRadius: 9999, boxShadow: '0 10px 25px -5px rgba(0,0,0,0.2)', fontSize: 14, fontWeight: 'bold', whiteSpace: 'nowrap', border: '2px solid rgba(255,255,255,0.15)', backdropFilter: 'blur(12px)' }}>
-              {notification.msg}
-          </div>
-        )}
-      </div>
-    </>
-  );
-}
+          <div style={{ position: 'absolute', top: 32, right: 120, zIndex: 8000, backgroundColor: '#1f2937', color:
