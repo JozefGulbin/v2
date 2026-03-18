@@ -27,6 +27,14 @@ interface RouteInfo {
   routeObj?: any; 
 }
 
+interface PinSegment {
+  letter: string;
+  lat: number;
+  lng: number;
+  distance?: number;
+  time?: number;
+}
+
 export default function MapPage() {
   const [viewMode, setViewMode] = useState<ViewMode>('landing');
   const [transportMode, setTransportMode] = useState<TransportMode>('walking');
@@ -35,6 +43,7 @@ export default function MapPage() {
   const [userLocation, setUserLocation] = useState<{ lat: number; lng: number, accuracy: number, speed: number | null, heading: number | null } | null>(null);
   const [isBuilderMode, setIsBuilderMode] = useState(false); 
   const [waypoints, setWaypoints] = useState<{lat: number, lng: number}[]>([]);
+  const [pinSegments, setPinSegments] = useState<PinSegment[]>([]);
   const [navStats, setNavStats] = useState({ speed: 0, distanceRem: 0, timeRem: 0, pace: '--:--', calories: 0 });
   const [showRouteSelector, setShowRouteSelector] = useState(false);
   const [notification, setNotification] = useState<{type: 'error' | 'info', msg: string} | null>(null);
@@ -55,6 +64,7 @@ export default function MapPage() {
   const accuracyCircleRef = useRef<any>(null);
   const gpsWatchId = useRef<number | null>(null);
   const markerLayersRef = useRef<any[]>([]);
+  const pinMarkerLayersRef = useRef<any[]>([]);
   const hasInitializedRef = useRef(false);
   
   const userLocationRef = useRef<{ lat: number; lng: number, heading: number | null } | null>(null);
@@ -111,8 +121,12 @@ export default function MapPage() {
             if (isNavigatingRef.current) return;
             if (highlightLayerRef.current) highlightLayerRef.current.remove();
             if (isBuilderMode) {
-              setWaypoints(prev => [...prev, e.latlng]);
-              setNotification({ type: 'info', msg: `PIN ${String.fromCharCode(65 + waypoints.length)} added` });
+              const newPin: PinSegment = {
+                letter: String.fromCharCode(65 + pinSegments.length),
+                lat: e.latlng.lat,
+                lng: e.latlng.lng
+              };
+              setPinSegments([...pinSegments, newPin]);
             }
             else { 
               setWaypoints([e.latlng]); 
@@ -132,7 +146,7 @@ export default function MapPage() {
     };
 
     setTimeout(initMap, 500);
-  }, [viewMode, mapLoaded]);
+  }, [viewMode, mapLoaded, isBuilderMode, pinSegments]);
 
   const startGpsTracking = () => {
     if (!navigator.geolocation) {
@@ -146,7 +160,6 @@ export default function MapPage() {
         setUserLocation(newLoc);
         updateUserMarker(newLoc);
 
-        // AUTO-START: Set a default waypoint on first GPS fix
         if (!hasInitializedRef.current && viewMode === 'map' && mapRef.current) {
             hasInitializedRef.current = true;
             const defaultDest = {
@@ -154,7 +167,6 @@ export default function MapPage() {
                 lng: longitude + 0.005
             };
             setWaypoints([defaultDest]);
-            setNotification({ type: 'info', msg: '📍 Route ready! Click GO to navigate.' });
         }
 
         if (isRecordingRef.current) {
@@ -214,6 +226,25 @@ export default function MapPage() {
     if (accuracyCircleRef.current) accuracyCircleRef.current.setLatLng([loc.lat, loc.lng]).setRadius(loc.accuracy);
     else accuracyCircleRef.current = L.circle([loc.lat, loc.lng], { radius: loc.accuracy, color: '#16a34a', fillOpacity: 0.05, weight: 0 }).addTo(mapRef.current);
   };
+
+  // Update pin markers on map
+  useEffect(() => {
+    if (!mapRef.current || !isBuilderMode) return;
+    const L = (window as any).L;
+    
+    pinMarkerLayersRef.current.forEach(m => m.remove());
+    pinMarkerLayersRef.current = [];
+
+    pinSegments.forEach((pin) => {
+      const icon = L.divIcon({ 
+        className: 'bg-transparent', 
+        html: `<div style="width: 45px; height: 45px; background: #10b981; border: 3px solid white; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: white; font-weight: bold; font-size: 18px; box-shadow: 0 4px 12px rgba(0,0,0,0.3);"><span>${pin.letter}</span></div>`, 
+        iconSize: [45, 45], 
+        iconAnchor: [22.5, 22.5] 
+      });
+      pinMarkerLayersRef.current.push(L.marker([pin.lat, pin.lng], { icon }).addTo(mapRef.current));
+    });
+  }, [pinSegments, isBuilderMode]);
 
   useEffect(() => {
     if (!mapRef.current) return;
@@ -332,7 +363,7 @@ export default function MapPage() {
           #__next { width: 100%; height: 100%; overflow: hidden !important; }
           @keyframes flowerpetal { 0% { transform: translateY(-10vh) translateX(0) rotate(0deg); } 100% { transform: translateY(110vh) translateX(20px) rotate(360deg); } }
           @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
-          @keyframes bounce { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-20px); } }
+          @keyframes bounce { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-15px); } }
           .flower-petal { position: absolute; color: #ffb6c1; user-select: none; z-index: 9999; pointer-events: none; font-size: 1.8rem; animation: flowerpetal 12s linear infinite; opacity: 0.8; }
           .no-scrollbar::-webkit-scrollbar { display: none; }
         `}</style>
@@ -373,7 +404,7 @@ export default function MapPage() {
                      <div style={{ width: 16, height: 16, borderRadius: '50%', backgroundColor: isRecording ? 'white' : '#dc2626', animation: isRecording ? 'pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite' : 'none' }}></div>
                      <span style={{ fontSize: 8, marginTop: 6, fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: 0.5 }}>Rec</span>
                   </button>
-                  <button onClick={() => setIsBuilderMode(!isBuilderMode)} style={{ width: 64, height: 64, borderRadius: 32, boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', border: `4px solid ${isBuilderMode ? '#d1fae5' : 'white'}`, backgroundColor: isBuilderMode ? '#10b981' : 'white', color: isBuilderMode ? 'white' : '#10b981', cursor: 'pointer', transition: 'all 0.3s' }}>
+                  <button onClick={() => { setIsBuilderMode(!isBuilderMode); if (isBuilderMode) { setPinSegments([]); pinMarkerLayersRef.current.forEach(m => m.remove()); pinMarkerLayersRef.current = []; } }} style={{ width: 64, height: 64, borderRadius: 32, boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', border: `4px solid ${isBuilderMode ? '#d1fae5' : 'white'}`, backgroundColor: isBuilderMode ? '#10b981' : 'white', color: isBuilderMode ? 'white' : '#10b981', cursor: 'pointer', transition: 'all 0.3s' }}>
                       <span style={{ fontSize: 24, fontWeight: 'bold' }}>{isBuilderMode ? '✓' : '+'}</span>
                       <span style={{ fontSize: 8, fontWeight: 'bold', textTransform: 'uppercase' }}>PIN</span>
                   </button>
@@ -383,7 +414,24 @@ export default function MapPage() {
                   </button>
               </div>
 
-              {routes.length > 0 && (
+              {isBuilderMode && pinSegments.length > 0 && (
+                  <div style={{ position: 'absolute', bottom: 40, left: 32, zIndex: 1000, pointerEvents: 'auto', backgroundColor: 'rgba(255,255,255,0.97)', backdropFilter: 'blur(12px)', borderRadius: 40, padding: 20, boxShadow: '0 10px 30px rgba(0,0,0,0.15)', border: '2px solid white', maxWidth: 300 }}>
+                      <h4 style={{ color: '#111827', fontWeight: 'bold', marginBottom: 16, fontSize: 14 }}>📍 PITSTOPS</h4>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 10, maxHeight: 200, overflowY: 'auto' }}>
+                          {pinSegments.map((pin, idx) => (
+                              <div key={idx} style={{ backgroundColor: '#f3f4f6', padding: 10, borderRadius: 12, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                  <span style={{ fontWeight: 'bold', color: '#10b981', fontSize: 16 }}>{pin.letter}</span>
+                                  <div style={{ fontSize: 11, color: '#6b7280', textAlign: 'right' }}>
+                                      {pin.distance && <div>{formatDist(pin.distance)}</div>}
+                                      {pin.time && <div>{formatTime(pin.time)}</div>}
+                                  </div>
+                              </div>
+                          ))}
+                      </div>
+                  </div>
+              )}
+
+              {routes.length > 0 && !isBuilderMode && (
                   <div style={{ position: 'absolute', bottom: 40, right: 32, zIndex: 1000, width: '100%', maxWidth: 420, pointerEvents: 'none', display: 'flex', flexDirection: 'column', gap: 16, alignItems: 'flex-end' }}>
                       {showRouteSelector && (
                           <div style={{ pointerEvents: 'auto', backgroundColor: 'rgba(255,255,255,0.97)', backdropFilter: 'blur(12px)', borderRadius: 56, padding: 28, boxShadow: '0 25px 40px -5px rgba(0,0,0,0.15)', maxHeight: '55vh', overflow: 'auto', border: '2px solid white', width: '100%' }}>
