@@ -37,6 +37,7 @@ export default function MapPage() {
   const [waypoints, setWaypoints] = useState<{lat: number, lng: number}[]>([]);
   const [navStats, setNavStats] = useState({ speed: 0, distanceRem: 0, timeRem: 0, pace: '--:--', calories: 0 });
   const [showSegments, setShowSegments] = useState(false);
+  const [showRouteSelector, setShowRouteSelector] = useState(false);
   const [notification, setNotification] = useState<{type: 'error' | 'info', msg: string} | null>(null);
   const [savedRoutes, setSavedRoutes] = useState<SavedRoute[]>([]);
   const [isRecording, setIsRecording] = useState(false);
@@ -82,7 +83,6 @@ export default function MapPage() {
       }
   }, [viewMode]);
 
-  // Initialize map when switching to map view
   useEffect(() => {
     if (viewMode !== 'map' || mapLoaded) return;
 
@@ -99,7 +99,6 @@ export default function MapPage() {
       if (mapRef.current) return;
 
       try {
-        console.log('Initializing map...');
         const map = L.map(mapContainerRef.current, { 
           zoomControl: false, 
           attributionControl: false,
@@ -118,13 +117,11 @@ export default function MapPage() {
             else { 
               setWaypoints([e.latlng]); 
               setShowSegments(false);
-              setNotification({ type: 'info', msg: 'Destination set' });
             }
         });
 
         mapRef.current = map;
         setMapLoaded(true);
-        console.log('Map initialized');
         
         startGpsTracking();
         map.locate({ setView: true, maxZoom: 15, enableHighAccuracy: true });
@@ -145,7 +142,6 @@ export default function MapPage() {
 
     const onGeoSuccess = (pos: GeolocationPosition) => {
         const { latitude, longitude, accuracy, speed, heading } = pos.coords;
-        console.log('GPS:', latitude, longitude);
         const newLoc = { lat: latitude, lng: longitude, accuracy, speed, heading };
         setUserLocation(newLoc);
         updateUserMarker(newLoc);
@@ -401,44 +397,61 @@ export default function MapPage() {
               </div>
 
               {routes.length > 0 && (
-                  <div style={{ position: 'absolute', bottom: 40, left: '50%', transform: 'translateX(-50%)', zIndex: 1000, width: '100%', maxWidth: 400, paddingLeft: 16, paddingRight: 16, pointerEvents: 'none' }}>
-                      {showSegments && (
-                          <div style={{ pointerEvents: 'auto', backgroundColor: 'rgba(255,255,255,0.95)', backdropFilter: 'blur(12px)', borderRadius: 48, padding: 24, boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1)', marginBottom: 16, maxHeight: '40vh', overflow: 'auto', border: '2px solid white' }}>
-                              <h3 style={{ fontWeight: 'bold', fontSize: 12, textTransform: 'uppercase', letterSpacing: 1, color: '#3b82f6', marginBottom: 16 }}>Route Stops</h3>
+                  <div style={{ position: 'absolute', bottom: 40, left: '50%', transform: 'translateX(-50%)', zIndex: 1000, width: '100%', maxWidth: 500, paddingLeft: 16, paddingRight: 16, pointerEvents: 'none' }}>
+                      {showRouteSelector && (
+                          <div style={{ pointerEvents: 'auto', backgroundColor: 'rgba(255,255,255,0.95)', backdropFilter: 'blur(12px)', borderRadius: 48, padding: 24, boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1)', marginBottom: 16, maxHeight: '50vh', overflow: 'auto', border: '2px solid white' }}>
+                              <h3 style={{ fontWeight: 'bold', fontSize: 12, textTransform: 'uppercase', letterSpacing: 1, color: '#3b82f6', marginBottom: 16 }}>🔀 ALTERNATIVE ROUTES</h3>
                               <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                                  {routes[selectedRouteIndex]?.waypointIndices?.map((idx, i) => {
-                                      if (i === 0) return null;
-                                      const prevIdx = routes[selectedRouteIndex].waypointIndices[i-1];
-                                      const segCoords = routes[selectedRouteIndex].coordinates.slice(prevIdx, idx + 1);
-                                      return (
-                                          <button key={i} onClick={() => highlight(segCoords)} style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: 16, backgroundColor: '#f3f4f6', borderRadius: 16, cursor: 'pointer', transition: 'all 0.3s', border: 'none', textAlign: 'left' }}>
-                                              <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-                                                  <div style={{ width: 24, height: 24, backgroundColor: '#3b82f6', color: 'white', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold', fontSize: 9 }}>{String.fromCharCode(65 + i - 1)}</div>
-                                                  <span style={{ fontWeight: 'bold', color: '#6b7280', fontSize: 12, textTransform: 'uppercase' }}>Stop {String.fromCharCode(65 + i - 1)}</span>
+                                  {routes.map((route, idx) => (
+                                      <button key={idx} onClick={() => setSelectedRouteIndex(idx)} style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: 16, backgroundColor: selectedRouteIndex === idx ? '#dbeafe' : '#f3f4f6', borderRadius: 16, cursor: 'pointer', transition: 'all 0.3s', border: selectedRouteIndex === idx ? '2px solid #3b82f6' : 'none', textAlign: 'left' }}>
+                                          <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+                                              <div style={{ width: 24, height: 24, backgroundColor: selectedRouteIndex === idx ? '#3b82f6' : '#9ca3af', color: 'white', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold', fontSize: 12 }}>{idx + 1}</div>
+                                              <div style={{ display: 'flex', flexDirection: 'column' }}>
+                                                  <span style={{ fontWeight: 'bold', color: '#1f2937', fontSize: 13 }}>{formatTime(route.summary.totalTime)}</span>
+                                                  <span style={{ color: '#6b7280', fontSize: 11 }}>{(route.summary.totalDistance / 1000).toFixed(2)} km</span>
                                               </div>
-                                              <span style={{ fontWeight: 'bold', color: '#1f2937', fontSize: 14, letterSpacing: -0.5 }}>{formatDist(calcDist(segCoords))}</span>
-                                          </button>
-                                      );
-                                  })}
+                                          </div>
+                                      </button>
+                                  ))}
                               </div>
                           </div>
                       )}
                       <div style={{ pointerEvents: 'auto', backgroundColor: 'rgba(255,255,255,0.95)', backdropFilter: 'blur(12px)', borderRadius: 56, padding: 16, boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', border: '2px solid white' }}>
-                          <div onClick={() => setShowSegments(!showSegments)} style={{ flex: 1, display: 'flex', flexDirection: 'column', paddingLeft: 24, cursor: 'pointer' }}>
+                          <div onClick={() => setShowRouteSelector(!showRouteSelector)} style={{ flex: 1, display: 'flex', flexDirection: 'column', paddingLeft: 24, cursor: 'pointer' }}>
                               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                                   <span style={{ fontSize: 24, fontWeight: 'bold', color: '#111827', letterSpacing: -1 }}>{formatTime(routes[selectedRouteIndex]?.summary.totalTime || 0)}</span>
                                   <span style={{ fontSize: 10, fontWeight: 'bold', color: '#3b82f6', backgroundColor: '#dbeafe', paddingLeft: 8, paddingRight: 8, paddingTop: 4, paddingBottom: 4, borderRadius: 9999, textTransform: 'uppercase' }}>{(routes[selectedRouteIndex]?.summary.totalDistance / 1000).toFixed(1)} km</span>
                               </div>
-                              <span style={{ fontSize: 9, fontWeight: 'bold', textTransform: 'uppercase', color: '#9ca3af', letterSpacing: 1 }}>Route {showSegments ? '▲' : '▼'}</span>
+                              <span style={{ fontSize: 9, fontWeight: 'bold', textTransform: 'uppercase', color: '#9ca3af', letterSpacing: 1 }}>{routes.length} ROUTE{routes.length !== 1 ? 'S' : ''} {showRouteSelector ? '▲' : '▼'}</span>
                           </div>
                           <div style={{ display: 'flex', gap: 8 }}>
-                              <button onClick={() => { setWaypoints([]); setRoutes([]); setShowSegments(false); }} style={{ width: 48, height: 48, borderRadius: '50%', backgroundColor: '#f3f4f6', color: '#d1d5db', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, border: 'none', cursor: 'pointer' }}>✕</button>
+                              <button onClick={() => { setWaypoints([]); setRoutes([]); setShowRouteSelector(false); }} style={{ width: 48, height: 48, borderRadius: '50%', backgroundColor: '#f3f4f6', color: '#d1d5db', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, border: 'none', cursor: 'pointer' }}>✕</button>
                               <button onClick={() => { setViewMode('navigation'); destinationRef.current = waypoints[waypoints.length - 1]; }} style={{ height: 64, paddingLeft: 40, paddingRight: 40, backgroundColor: '#3b82f6', color: 'white', borderRadius: '50%', fontWeight: 'bold', fontSize: 18, boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1)', cursor: 'pointer', border: 'none', transition: 'all 0.3s' }}>GO</button>
                           </div>
                       </div>
                   </div>
               )}
           </>
+        )}
+
+        {/* NAVIGATION VIEW */}
+        {viewMode === 'navigation' && (
+          <div style={{ position: 'absolute', top: 32, left: 32, zIndex: 1000, display: 'flex', gap: 16 }}>
+              <button onClick={() => setViewMode('map')} style={{ width: 64, height: 64, backgroundColor: '#3b82f6', color: 'white', border: '4px solid #93c5fd', borderRadius: 32, boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 28, cursor: 'pointer', transition: 'all 0.3s' }}>
+                ← 
+              </button>
+              <div style={{ backgroundColor: 'rgba(255,255,255,0.95)', backdropFilter: 'blur(12px)', borderRadius: 32, padding: 16, display: 'flex', alignItems: 'center', gap: 24, boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1)', border: '2px solid white' }}>
+                  <div style={{ display: 'flex', flexDirection: 'column' }}>
+                      <span style={{ fontSize: 11, fontWeight: 'bold', color: '#9ca3af', textTransform: 'uppercase', letterSpacing: 1 }}>TO DESTINATION</span>
+                      <span style={{ fontSize: 28, fontWeight: 'bold', color: '#111827' }}>{formatDist(navStats.distanceRem)}</span>
+                  </div>
+                  <div style={{ width: 1, backgroundColor: '#e5e7eb', height: 60 }}></div>
+                  <div style={{ display: 'flex', flexDirection: 'column' }}>
+                      <span style={{ fontSize: 11, fontWeight: 'bold', color: '#9ca3af', textTransform: 'uppercase', letterSpacing: 1 }}>SPEED</span>
+                      <span style={{ fontSize: 24, fontWeight: 'bold', color: '#16a34a' }}>{navStats.speed} km/h</span>
+                  </div>
+              </div>
+          </div>
         )}
 
         {/* HISTORY VIEW */}
