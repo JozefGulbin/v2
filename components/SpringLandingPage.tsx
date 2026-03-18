@@ -24,7 +24,7 @@ const SpringLandingPage = ({ onEikime, onMarsrutai, onSos }: SpringLandingPagePr
       width: '100%',
       height: '100%'
     }}>
-      {/* Floating Spring Elements - BACKGROUND */}
+      {/* Floating Spring Elements */}
       <div style={{ position: 'absolute', top: '5%', left: '5%', fontSize: '60px', opacity: 0.4, animation: 'float 6s ease-in-out infinite' }}>🌸</div>
       <div style={{ position: 'absolute', top: '10%', right: '8%', fontSize: '50px', opacity: 0.35, animation: 'float 7s ease-in-out infinite' }}>🌼</div>
       <div style={{ position: 'absolute', top: '20%', left: '12%', fontSize: '55px', opacity: 0.4, animation: 'float 5s ease-in-out infinite' }}>🌸</div>
@@ -41,11 +41,9 @@ const SpringLandingPage = ({ onEikime, onMarsrutai, onSos }: SpringLandingPagePr
       <div style={{ position: 'absolute', bottom: '35%', left: '20%', fontSize: '50px', opacity: 0.35, animation: 'float 8s ease-in-out infinite' }}>🦋</div>
       <div style={{ position: 'absolute', top: '25%', left: '85%', fontSize: '55px', opacity: 0.4, animation: 'float 6s ease-in-out infinite' }}>🌸</div>
       <div style={{ position: 'absolute', bottom: '30%', left: '88%', fontSize: '50px', opacity: 0.35, animation: 'float 7.5s ease-in-out infinite' }}>🌼</div>
-
-      {/* Sun decoration */}
       <div style={{ position: 'absolute', top: '3%', right: '3%', fontSize: '70px', opacity: 0.15 }}>☀️</div>
 
-      {/* Main Card - Width 2, Height 4 (tall block) */}
+      {/* Main Card */}
       <div style={{
         backgroundColor: 'rgba(255, 255, 255, 0.92)',
         backdropFilter: 'blur(10px)',
@@ -99,7 +97,6 @@ const SpringLandingPage = ({ onEikime, onMarsrutai, onSos }: SpringLandingPagePr
           borderBottom: '3px solid #E0E0E0',
           paddingBottom: '10px'
         }}>
-          {/* EIKIME Tab */}
           <button
             onClick={() => setActiveTab('eikime')}
             style={{
@@ -121,7 +118,6 @@ const SpringLandingPage = ({ onEikime, onMarsrutai, onSos }: SpringLandingPagePr
             📍 EIKIME
           </button>
 
-          {/* MANO MARŠRUTAI Tab */}
           <button
             onClick={() => setActiveTab('marsrutai')}
             style={{
@@ -143,7 +139,6 @@ const SpringLandingPage = ({ onEikime, onMarsrutai, onSos }: SpringLandingPagePr
             🗺️ MARŠRUTAI
           </button>
 
-          {/* SOS Tab */}
           <button
             onClick={() => setActiveTab('sos')}
             style={{
@@ -172,12 +167,10 @@ const SpringLandingPage = ({ onEikime, onMarsrutai, onSos }: SpringLandingPagePr
           {/* EIKIME Content */}
           {activeTab === 'eikime' && (
             <div style={{ textAlign: 'center', padding: '20px 0', animation: 'fadeIn 0.4s ease', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 20 }}>
-              <h2 style={{ color: '#2d5016', marginBottom: '8px', fontSize: '20px', fontWeight: 'bold' }}>
-                🎉 START YOUR ADVENTURE!
+              {/* BIG GREEN PIRMYN TEXT */}
+              <h2 style={{ color: '#16a34a', marginBottom: '8px', fontSize: 48, fontWeight: 'bold', letterSpacing: -1 }}>
+                PIRMYN!
               </h2>
-              <p style={{ color: '#7cb342', fontSize: '14px', marginBottom: '15px', lineHeight: '1.6' }}>
-                Tap PIRMYN! to begin your spring journey! 🚶‍♂️
-              </p>
               
               {/* BIG PIRMYN BUTTON */}
               <button onClick={onEikime} style={{
@@ -208,8 +201,6 @@ const SpringLandingPage = ({ onEikime, onMarsrutai, onSos }: SpringLandingPagePr
               }}>
                 ↗️
               </button>
-
-              <div style={{ fontSize: 12, color: '#9ca3af', fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: 0.5 }}>PIRMYN!</div>
             </div>
           )}
 
