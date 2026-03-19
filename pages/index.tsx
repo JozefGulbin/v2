@@ -65,11 +65,13 @@ export default function MapPage() {
   const gpsWatchId = useRef<number | null>(null);
   const markerLayersRef = useRef<any[]>([]);
   const pinMarkerLayersRef = useRef<any[]>([]);
+  const mapClickHandlerRef = useRef<((e: any) => void) | null>(null);
   
   const userLocationRef = useRef<{ lat: number; lng: number, heading: number | null } | null>(null);
   const isNavigatingRef = useRef(false);
   const destinationRef = useRef<{ lat: number; lng: number } | null>(null);
   const isRecordingRef = useRef(false);
+  const isBuilderModeRef = useRef(false);
 
   useEffect(() => {
     const localData = localStorage.getItem('taputapu_saved_routes');
@@ -81,6 +83,8 @@ export default function MapPage() {
   }, [userLocation]);
 
   useEffect(() => { isRecordingRef.current = isRecording; }, [isRecording]);
+
+  useEffect(() => { isBuilderModeRef.current = isBuilderMode; }, [isBuilderMode]);
   
   useEffect(() => {
       isNavigatingRef.current = viewMode === 'navigation';
@@ -116,12 +120,13 @@ export default function MapPage() {
         
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 }).addTo(map);
 
-        map.on('click', (e: any) => {
+        // Create click handler
+        const handleMapClick = (e: any) => {
             if (isNavigatingRef.current) return;
             if (highlightLayerRef.current) highlightLayerRef.current.remove();
             
             // PIN+ mode: add multiple pins (A, B, C...)
-            if (isBuilderMode) {
+            if (isBuilderModeRef.current) {
               const newPin: PinSegment = {
                 letter: String.fromCharCode(65 + pinSegments.length),
                 lat: e.latlng.lat,
@@ -134,7 +139,10 @@ export default function MapPage() {
               setWaypoints([e.latlng]); 
               setShowRouteSelector(false);
             }
-        });
+        };
+
+        mapClickHandlerRef.current = handleMapClick;
+        map.on('click', handleMapClick);
 
         mapRef.current = map;
         setMapLoaded(true);
