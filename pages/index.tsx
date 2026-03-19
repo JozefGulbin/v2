@@ -240,7 +240,7 @@ export default function MapPage() {
   };
 
   // Fetch segment routes via API
-  const fetchSegmentRoute = async (from: { lat: number; lng: number }, to: PinSegment, fromLetter: string) => {
+  const fetchSegmentRoute = async (from: { lat: number; lng: number }, to: PinSegment, fromLetter: string, toIndex: number) => {
     const coords = `${from.lng},${from.lat};${to.lng},${to.lat}`;
     const profile = transportModeRef.current === 'walking' ? 'foot' : transportModeRef.current === 'cycling' ? 'bike' : 'car';
     
@@ -262,7 +262,7 @@ export default function MapPage() {
         
         setSegmentRoutes(prev => {
           const updated = [...prev];
-          updated[parseInt(to.letter.charCodeAt(0) - 65) - 1] = newRoute;
+          updated[toIndex] = newRoute;
           return updated;
         });
       }
@@ -285,12 +285,12 @@ export default function MapPage() {
     };
     let previousLetter = 'A';
 
-    pinSegments.forEach((pin) => {
+    pinSegments.forEach((pin, idx) => {
       if (pin.letter === 'A') {
         previousPoint = { lat: pin.lat, lng: pin.lng };
         previousLetter = 'A';
       } else {
-        fetchSegmentRoute(previousPoint, pin, previousLetter);
+        fetchSegmentRoute(previousPoint, pin, previousLetter, idx - 1);
         previousPoint = { lat: pin.lat, lng: pin.lng };
         previousLetter = pin.letter;
       }
