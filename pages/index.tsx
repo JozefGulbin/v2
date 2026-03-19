@@ -263,6 +263,38 @@ export default function MapPage() {
     }
   }, [mainDestination, mapLoaded]);
 
+  // Update main route (user location to PIN A) - ONLY BLUE THIN LINE
+  useEffect(() => {
+    const L = (window as any).L;
+    if (!mapRef.current || !L) return;
+
+    if (mainRoutePolylineRef.current) {
+      mainRoutePolylineRef.current.remove();
+      mainRoutePolylineRef.current = null;
+    }
+
+    if (mainDestination && userLocationRef.current) {
+      const coords = `${userLocationRef.current.lng},${userLocationRef.current.lat};${mainDestination.lng},${mainDestination.lat}`;
+      const profile = transportModeRef.current === 'walking' ? 'foot' : transportModeRef.current === 'cycling' ? 'bike' : 'car';
+      
+      fetch(`https://router.project-osrm.org/route/v1/${profile}/${coords}?overview=full&geometries=geojson`)
+        .then(res => res.json())
+        .then(data => {
+          if (data.routes && data.routes[0]) {
+            const coordinates = data.routes[0].geometry.coordinates.map((c: any) => [c[1], c[0]]);
+            if (mainRoutePolylineRef.current) mainRoutePolylineRef.current.remove();
+            mainRoutePolylineRef.current = L.polyline(coordinates, {
+              color: '#3b82f6',
+              weight: 4,
+              opacity: 0.9,
+              lineCap: 'round'
+            }).addTo(mapRef.current);
+          }
+        })
+        .catch(err => console.error('Main route fetch error:', err));
+    }
+  }, [mainDestination, transportMode, mapLoaded]);
+
   // Fetch segment routes via API
   const fetchSegmentRoute = async (from: { lat: number; lng: number }, to: PinSegment, fromLetter: string, toIndex: number) => {
     const coords = `${from.lng},${from.lat};${to.lng},${to.lat}`;
@@ -295,14 +327,9 @@ export default function MapPage() {
     }
   };
 
-  // Update pins - calculate routes from main destination
+  // Update pins - calculate routes from main destination (PIN A → B → C, etc.)
   useEffect(() => {
-    if (!mainDestination || !userLocationRef.current) {
-      setSegmentRoutes([]);
-      return;
-    }
-
-    if (pinSegments.length === 0) {
+    if (!mainDestination || pinSegments.length === 0) {
       setSegmentRoutes([]);
       return;
     }
@@ -317,64 +344,40 @@ export default function MapPage() {
     });
   }, [pinSegments, mainDestination]);
 
-  // Update main route (user location to PIN A)
+  // Update segment polylines on map - ONLY show segment routes (PIN A→B, B→C, etc.) NOT main route
   useEffect(() => {
-    const L = (window as any).L;
-    if (!mapRef.current || !L) return;
-
-    if (mainRoutePolylineRef.current) {
-      mainRoutePolylineRef.current.remove();
-      mainRoutePolylineRef.current = null;
+    if (!mapRef.current) {
+      segmentPolylinesRef.current.forEach(l => l.remove());
+      segmentPolylinesRef.current = [];
+      return;
     }
 
-    if (mainDestination && userLocationRef.current) {
-      const coords = `${userLocationRef.current.lng},${userLocationRef.current.lat};${mainDestination.lng},${mainDestination.lat}`;
-      const profile = transportModeRef.current === 'walking' ? 'foot' : transportModeRef.current === 'cycling' ? 'bike' : 'car';
-      
-      fetch(`https://router.project-osrm.org/route/v1/${profile}/${coords}?overview=full&geometries=geojson`)
-        .then(res => res.json())
-        .then(data => {
-          if (data.routes && data.routes[0]) {
-            const coordinates = data.routes[0].geometry.coordinates.map((c: any) => [c[1], c[0]]);
-            mainRoutePolylineRef.current = L.polyline(coordinates, {
-              color: '#3b82f6',
-              weight: 4,
-              opacity: 0.9,
-              lineCap: 'round'
-            }).addTo(mapRef.current);
-          }
-        })
-        .catch(err => console.error('Main route fetch error:', err));
-    }
-  }, [mainDestination, transportMode, mapLoaded]);
-
-  // Update segment polylines on map
-  useEffect(() => {
-    if (!mapRef.current || segmentRoutes.length === 0) {
-        segmentPolylinesRef.current.forEach(l => l.remove());
-        segmentPolylinesRef.current = [];
-        return;
-    }
     const L = (window as any).L;
     
+    // Remove all segment polylines first
     segmentPolylinesRef.current.forEach(l => l.remove());
     segmentPolylinesRef.current = [];
 
-    segmentRoutes.forEach((segment, idx) => {
-      if (!segment || !segment.coordinates || segment.coordinates.length === 0) return;
-      const colors = ['#ff6b6b', '#4ecdc4', '#45b7d1', '#f9ca24', '#6c5ce7', '#a8e6cf'];
-      const color = colors[idx % colors.length];
-      const isHighlighted = idx === highlightedSegmentIndex;
-      
-      const polyline = L.polyline(segment.coordinates, {
-        color: color,
-        weight: isHighlighted ? 8 : 5,
-        opacity: isHighlighted ? 1 : 0.7,
-        lineCap: 'round'
-      }).addTo(mapRef.current);
-      segmentPolylinesRef.current.push(polyline);
-    });
-  }, [segmentRoutes, highlightedSegmentIndex]);
+    // Only render segment routes if we have pins
+    if (segmentRoutes.length > 0 && pinSegments.length > 0) {
+      segmentRoutes.forEach((segment, idx) => {
+        if (!segment || !segment.coordinates || segment.coordinates.length === 0) return;
+        
+        // Use different colors for segments, NOT blue
+        const colors = ['#ff6b6b', '#4ecdc4', '#45b7d1', '#f9ca24', '#6c5ce7', '#a8e6cf'];
+        const color = colors[idx % colors.length];
+        const isHighlighted = idx === highlightedSegmentIndex;
+        
+        const polyline = L.polyline(segment.coordinates, {
+          color: color,
+          weight: isHighlighted ? 8 : 5,
+          opacity: isHighlighted ? 1 : 0.7,
+          lineCap: 'round'
+        }).addTo(mapRef.current);
+        segmentPolylinesRef.current.push(polyline);
+      });
+    }
+  }, [segmentRoutes, highlightedSegmentIndex, pinSegments]);
 
   // Update pin markers on map
   useEffect(() => {
@@ -565,7 +568,7 @@ export default function MapPage() {
                   </button>
               </div>
 
-              {isBuilderMode && pinSegments.length > 0 && (
+              {isBuilderMode && (
                   <div style={{ position: 'absolute', bottom: 40, left: 32, zIndex: 1000, pointerEvents: 'auto', backgroundColor: 'rgba(255,255,255,0.97)', backdropFilter: 'blur(12px)', borderRadius: 40, padding: 20, boxShadow: '0 10px 30px rgba(0,0,0,0.15)', border: '2px solid white', maxWidth: 320 }}>
                       <h4 style={{ color: '#111827', fontWeight: 'bold', marginBottom: 16, fontSize: 14 }}>📍 PITSTOPS</h4>
                       <div style={{ display: 'flex', flexDirection: 'column', gap: 12, maxHeight: 300, overflowY: 'auto' }}>
@@ -585,7 +588,7 @@ export default function MapPage() {
                               <span style={{ fontWeight: 'bold', color: '#111827', fontSize: 16 }}>PIN A (📍 START)</span>
                               <span style={{ fontSize: 20, color: '#3b82f6' }}>▶</span>
                           </div>
-                          {pinSegments.map((pin, idx) => (
+                          {pinSegments.length > 0 && pinSegments.map((pin, idx) => (
                               <div 
                                 key={idx} 
                                 onClick={() => setHighlightedSegmentIndex(highlightedSegmentIndex === idx ? null : idx)}
