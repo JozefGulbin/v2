@@ -35,6 +35,14 @@ interface PinSegment {
   time?: number;
 }
 
+interface SegmentRoute {
+  from: string;
+  to: string;
+  distance: number;
+  time: number;
+  coordinates: any[];
+}
+
 export default function MapPage() {
   const [viewMode, setViewMode] = useState<ViewMode>('landing');
   const [transportMode, setTransportMode] = useState<TransportMode>('walking');
@@ -44,6 +52,7 @@ export default function MapPage() {
   const [isBuilderMode, setIsBuilderMode] = useState(false); 
   const [waypoints, setWaypoints] = useState<{lat: number, lng: number}[]>([]);
   const [pinSegments, setPinSegments] = useState<PinSegment[]>([]);
+  const [segmentRoutes, setSegmentRoutes] = useState<SegmentRoute[]>([]);
   const [navStats, setNavStats] = useState({ speed: 0, distanceRem: 0, timeRem: 0, pace: '--:--', calories: 0 });
   const [showRouteSelector, setShowRouteSelector] = useState(false);
   const [notification, setNotification] = useState<{type: 'error' | 'info', msg: string} | null>(null);
@@ -65,7 +74,7 @@ export default function MapPage() {
   const gpsWatchId = useRef<number | null>(null);
   const markerLayersRef = useRef<any[]>([]);
   const pinMarkerLayersRef = useRef<any[]>([]);
-  const mapClickHandlerRef = useRef<((e: any) => void) | null>(null);
+  const segmentPolylinesRef = useRef<any[]>([]);
   
   const userLocationRef = useRef<{ lat: number; lng: number, heading: number | null } | null>(null);
   const isNavigatingRef = useRef(false);
@@ -120,12 +129,10 @@ export default function MapPage() {
         
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 }).addTo(map);
 
-        // Create click handler
         const handleMapClick = (e: any) => {
             if (isNavigatingRef.current) return;
             if (highlightLayerRef.current) highlightLayerRef.current.remove();
             
-            // PIN+ mode: add multiple pins (A, B, C...)
             if (isBuilderModeRef.current) {
               const newPin: PinSegment = {
                 letter: String.fromCharCode(65 + pinSegments.length),
@@ -134,14 +141,12 @@ export default function MapPage() {
               };
               setPinSegments([...pinSegments, newPin]);
             }
-            // Regular click: set single destination for quick route
             else { 
               setWaypoints([e.latlng]); 
               setShowRouteSelector(false);
             }
         };
 
-        mapClickHandlerRef.current = handleMapClick;
         map.on('click', handleMapClick);
 
         mapRef.current = map;
@@ -157,6 +162,79 @@ export default function MapPage() {
 
     setTimeout(initMap, 500);
   }, [viewMode, mapLoaded]);
+
+  // Handle pin segment routing
+  useEffect(() => {
+    if (!mapRef.current || pinSegments.length < 2 || !isBuilderMode) return;
+    const L = (window as any).L;
+
+    const calculateSegmentRoutes = async () => {
+      const newSegmentRoutes: SegmentRoute[] = [];
+      
+      for (let i = 1; i < pinSegments.length; i++) {
+        const fromPin = pinSegments[i - 1];
+        const toPin = pinSegments[i];
+        
+        const fromLatLng = L.latLng(fromPin.lat, fromPin.lng);
+        const toLatLng = L.latLng(toPin.lat, toPin.lng);
+        
+        let serviceUrl = transportMode === 'walking' ? 'https://routing.openstreetmap.de/routed-foot/route/v1' : (transportMode === 'cycling' ? 'https://routing.openstreetmap.de/routed-bike/route/v1' : 'https://router.project-osrm.org/route/v1');
+        
+        const control = L.Routing.control({
+            waypoints: [fromLatLng, toLatLng],
+            router: L.Routing.osrmv1({ serviceUrl, profile: 'driving' }),
+            lineOptions: { styles: [{ color: 'transparent', opacity: 0 }] },
+            createMarker: () => null,
+            show: false,
+            fitSelectedRoutes: false
+        }).addTo(mapRef.current);
+
+        control.on('routesfound', (e: any) => {
+            if (e.routes.length > 0) {
+              const route = e.routes[0];
+              newSegmentRoutes.push({
+                from: fromPin.letter,
+                to: toPin.letter,
+                distance: route.summary.totalDistance,
+                time: route.summary.totalTime,
+                coordinates: route.coordinates
+              });
+
+              if (newSegmentRoutes.length === pinSegments.length - 1) {
+                setSegmentRoutes(newSegmentRoutes);
+              }
+            }
+        });
+    };
+
+    calculateSegmentRoutes();
+  }, [pinSegments, transportMode, isBuilderMode]);
+
+  // Update segment polylines on map
+  useEffect(() => {
+    if (!mapRef.current || segmentRoutes.length === 0) {
+        segmentPolylinesRef.current.forEach(l => l.remove());
+        segmentPolylinesRef.current = [];
+        return;
+    }
+    const L = (window as any).L;
+    
+    segmentPolylinesRef.current.forEach(l => l.remove());
+    segmentPolylinesRef.current = [];
+
+    segmentRoutes.forEach((segment, idx) => {
+      const colors = ['#ff6b6b', '#4ecdc4', '#45b7d1', '#f9ca24', '#6c5ce7'];
+      const color = colors[idx % colors.length];
+      
+      const polyline = L.polyline(segment.coordinates, {
+        color: color,
+        weight: 6,
+        opacity: 0.7,
+        lineCap: 'round'
+      }).addTo(mapRef.current);
+      segmentPolylinesRef.current.push(polyline);
+    });
+  }, [segmentRoutes]);
 
   const startGpsTracking = () => {
     if (!navigator.geolocation) {
@@ -236,7 +314,7 @@ export default function MapPage() {
     pinMarkerLayersRef.current.forEach(m => m.remove());
     pinMarkerLayersRef.current = [];
 
-    pinSegments.forEach((pin) => {
+    pinSegments.forEach((pin, idx) => {
       const icon = L.divIcon({ 
         className: 'bg-transparent', 
         html: `<div style="width: 45px; height: 45px; background: #10b981; border: 3px solid white; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: white; font-weight: bold; font-size: 18px; box-shadow: 0 4px 12px rgba(0,0,0,0.3);"><span>${pin.letter}</span></div>`, 
@@ -272,12 +350,10 @@ export default function MapPage() {
   useEffect(() => {
     if (!mapRef.current || routes.length === 0) {
         routePolylinesRef.current.forEach(l => l.remove());
-        segmentLayersRef.current.forEach(l => l.remove());
         return;
     }
     const L = (window as any).L;
     routePolylinesRef.current.forEach(l => l.remove());
-    segmentLayersRef.current.forEach(l => l.remove());
     routes.forEach((route, i) => {
         const isActive = i === selectedRouteIndex;
         const polyline = L.polyline(route.coordinates, { 
@@ -405,7 +481,7 @@ export default function MapPage() {
                      <div style={{ width: 16, height: 16, borderRadius: '50%', backgroundColor: isRecording ? 'white' : '#dc2626', animation: isRecording ? 'pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite' : 'none' }}></div>
                      <span style={{ fontSize: 8, marginTop: 6, fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: 0.5 }}>Rec</span>
                   </button>
-                  <button onClick={() => { setIsBuilderMode(!isBuilderMode); if (isBuilderMode) { setPinSegments([]); pinMarkerLayersRef.current.forEach(m => m.remove()); pinMarkerLayersRef.current = []; } }} style={{ width: 64, height: 64, borderRadius: 32, boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', border: `4px solid ${isBuilderMode ? '#d1fae5' : 'white'}`, backgroundColor: isBuilderMode ? '#10b981' : 'white', color: isBuilderMode ? 'white' : '#10b981', cursor: 'pointer', transition: 'all 0.3s' }}>
+                  <button onClick={() => { setIsBuilderMode(!isBuilderMode); if (isBuilderMode) { setPinSegments([]); setSegmentRoutes([]); pinMarkerLayersRef.current.forEach(m => m.remove()); pinMarkerLayersRef.current = []; segmentPolylinesRef.current.forEach(p => p.remove()); segmentPolylinesRef.current = []; } }} style={{ width: 64, height: 64, borderRadius: 32, boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', border: `4px solid ${isBuilderMode ? '#d1fae5' : 'white'}`, backgroundColor: isBuilderMode ? '#10b981' : 'white', color: isBuilderMode ? 'white' : '#10b981', cursor: 'pointer', transition: 'all 0.3s' }}>
                       <span style={{ fontSize: 24, fontWeight: 'bold' }}>{isBuilderMode ? '✓' : '+'}</span>
                       <span style={{ fontSize: 8, fontWeight: 'bold', textTransform: 'uppercase' }}>PIN</span>
                   </button>
@@ -416,16 +492,19 @@ export default function MapPage() {
               </div>
 
               {isBuilderMode && pinSegments.length > 0 && (
-                  <div style={{ position: 'absolute', bottom: 40, left: 32, zIndex: 1000, pointerEvents: 'auto', backgroundColor: 'rgba(255,255,255,0.97)', backdropFilter: 'blur(12px)', borderRadius: 40, padding: 20, boxShadow: '0 10px 30px rgba(0,0,0,0.15)', border: '2px solid white', maxWidth: 300 }}>
+                  <div style={{ position: 'absolute', bottom: 40, left: 32, zIndex: 1000, pointerEvents: 'auto', backgroundColor: 'rgba(255,255,255,0.97)', backdropFilter: 'blur(12px)', borderRadius: 40, padding: 20, boxShadow: '0 10px 30px rgba(0,0,0,0.15)', border: '2px solid white', maxWidth: 320 }}>
                       <h4 style={{ color: '#111827', fontWeight: 'bold', marginBottom: 16, fontSize: 14 }}>📍 PITSTOPS</h4>
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: 10, maxHeight: 200, overflowY: 'auto' }}>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 12, maxHeight: 300, overflowY: 'auto' }}>
                           {pinSegments.map((pin, idx) => (
-                              <div key={idx} style={{ backgroundColor: '#f3f4f6', padding: 10, borderRadius: 12, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                  <span style={{ fontWeight: 'bold', color: '#10b981', fontSize: 16 }}>{pin.letter}</span>
-                                  <div style={{ fontSize: 11, color: '#6b7280', textAlign: 'right' }}>
-                                      {pin.distance && <div>{formatDist(pin.distance)}</div>}
-                                      {pin.time && <div>{formatTime(pin.time)}</div>}
-                                  </div>
+                              <div key={idx} style={{ backgroundColor: '#f3f4f6', padding: 12, borderRadius: 12, display: 'flex', flexDirection: 'column', gap: 6 }}>
+                                  <span style={{ fontWeight: 'bold', color: '#10b981', fontSize: 16 }}>PIN {pin.letter}</span>
+                                  {idx > 0 && segmentRoutes[idx - 1] && (
+                                      <div style={{ fontSize: 11, color: '#6b7280', backgroundColor: 'white', padding: 8, borderRadius: 8 }}>
+                                          <div>← From PIN {segmentRoutes[idx - 1].from}</div>
+                                          <div style={{ color: '#3b82f6', fontWeight: 'bold' }}>{formatDist(segmentRoutes[idx - 1].distance)}</div>
+                                          <div style={{ color: '#16a34a', fontWeight: 'bold' }}>{formatTime(segmentRoutes[idx - 1].time)}</div>
+                                      </div>
+                                  )}
                               </div>
                           ))}
                       </div>
