@@ -240,11 +240,9 @@ export default function MapPage() {
   };
 
   // Fetch segment routes via API
-  const fetchSegmentRoute = async (from: PinSegment, to: PinSegment, idx: number) => {
+  const fetchSegmentRoute = async (from: { lat: number; lng: number }, to: PinSegment, fromLetter: string) => {
     const coords = `${from.lng},${from.lat};${to.lng},${to.lat}`;
     const profile = transportModeRef.current === 'walking' ? 'foot' : transportModeRef.current === 'cycling' ? 'bike' : 'car';
-    
-    console.log(`Fetching route ${from.letter} -> ${to.letter}:`, coords, profile);
     
     try {
       const response = await fetch(
@@ -252,23 +250,19 @@ export default function MapPage() {
       );
       const data = await response.json();
       
-      console.log(`Route response for ${from.letter}->${to.letter}:`, data);
-      
       if (data.routes && data.routes[0]) {
         const route = data.routes[0];
         const newRoute: SegmentRoute = {
-          from: from.letter,
+          from: fromLetter,
           to: to.letter,
           distance: route.distance,
           time: route.duration,
           coordinates: route.geometry.coordinates.map((c: any) => [c[1], c[0]])
         };
         
-        console.log(`Segment ${from.letter}->${to.letter} distance: ${newRoute.distance}m, time: ${newRoute.time}s`);
-        
         setSegmentRoutes(prev => {
           const updated = [...prev];
-          updated[idx] = newRoute;
+          updated[parseInt(to.letter.charCodeAt(0) - 65) - 1] = newRoute;
           return updated;
         });
       }
@@ -277,18 +271,28 @@ export default function MapPage() {
     }
   };
 
-  // Update pins - calculate routes
+  // Update pins - calculate routes from original PIN A (current location)
   useEffect(() => {
-    if (pinSegments.length < 2) {
+    if (pinSegments.length === 0 || !userLocationRef.current) {
       setSegmentRoutes([]);
       return;
     }
 
-    console.log('Calculating routes for pins:', pinSegments);
+    // Start from user's current location (original PIN A)
+    let previousPoint: { lat: number; lng: number } = {
+      lat: userLocationRef.current.lat,
+      lng: userLocationRef.current.lng
+    };
+    let previousLetter = 'A';
 
-    pinSegments.forEach((pin, idx) => {
-      if (idx > 0) {
-        fetchSegmentRoute(pinSegments[idx - 1], pin, idx - 1);
+    pinSegments.forEach((pin) => {
+      if (pin.letter === 'A') {
+        previousPoint = { lat: pin.lat, lng: pin.lng };
+        previousLetter = 'A';
+      } else {
+        fetchSegmentRoute(previousPoint, pin, previousLetter);
+        previousPoint = { lat: pin.lat, lng: pin.lng };
+        previousLetter = pin.letter;
       }
     });
   }, [pinSegments]);
@@ -305,17 +309,10 @@ export default function MapPage() {
     segmentPolylinesRef.current.forEach(l => l.remove());
     segmentPolylinesRef.current = [];
 
-    console.log('Drawing segment routes:', segmentRoutes);
-
     segmentRoutes.forEach((segment, idx) => {
-      if (!segment || !segment.coordinates || segment.coordinates.length === 0) {
-        console.log(`Skipping segment ${idx} - no coordinates`);
-        return;
-      }
-      const colors = ['#ff6b6b', '#4ecdc4', '#45b7d1', '#f9ca24', '#6c5ce7'];
+      if (!segment || !segment.coordinates || segment.coordinates.length === 0) return;
+      const colors = ['#ff6b6b', '#4ecdc4', '#45b7d1', '#f9ca24', '#6c5ce7', '#a8e6cf'];
       const color = colors[idx % colors.length];
-      
-      console.log(`Drawing segment ${idx} with ${segment.coordinates.length} points, color: ${color}`);
       
       const polyline = L.polyline(segment.coordinates, {
         color: color,
@@ -345,6 +342,16 @@ export default function MapPage() {
       pinMarkerLayersRef.current.push(L.marker([pin.lat, pin.lng], { icon }).addTo(mapRef.current));
     });
   }, [pinSegments, isBuilderMode]);
+
+  const removePinSegment = (letterToRemove: string) => {
+    const updated = pinSegments.filter(p => p.letter !== letterToRemove);
+    // Rename remaining pins to maintain A, B, C order
+    const renamed = updated.map((p, idx) => ({
+      ...p,
+      letter: String.fromCharCode(65 + idx)
+    }));
+    setPinSegments(renamed);
+  };
 
   useEffect(() => {
     if (!mapRef.current) return;
@@ -517,15 +524,35 @@ export default function MapPage() {
                       <h4 style={{ color: '#111827', fontWeight: 'bold', marginBottom: 16, fontSize: 14 }}>📍 PITSTOPS</h4>
                       <div style={{ display: 'flex', flexDirection: 'column', gap: 12, maxHeight: 300, overflowY: 'auto' }}>
                           {pinSegments.map((pin, idx) => (
-                              <div key={idx} style={{ backgroundColor: '#f3f4f6', padding: 12, borderRadius: 12, display: 'flex', flexDirection: 'column', gap: 6 }}>
-                                  <span style={{ fontWeight: 'bold', color: '#10b981', fontSize: 16 }}>PIN {pin.letter}</span>
-                                  {idx > 0 && segmentRoutes[idx - 1] && (
-                                      <div style={{ fontSize: 11, color: '#6b7280', backgroundColor: 'white', padding: 8, borderRadius: 8 }}>
-                                          <div>← From PIN {segmentRoutes[idx - 1].from}</div>
-                                          <div style={{ color: '#3b82f6', fontWeight: 'bold' }}>{formatDist(segmentRoutes[idx - 1].distance)}</div>
-                                          <div style={{ color: '#16a34a', fontWeight: 'bold' }}>{formatTime(segmentRoutes[idx - 1].time)}</div>
-                                      </div>
-                                  )}
+                              <div key={idx} style={{ backgroundColor: '#f3f4f6', padding: 12, borderRadius: 12, display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}>
+                                  <div style={{ flex: 1 }}>
+                                      <span style={{ fontWeight: 'bold', color: '#10b981', fontSize: 16 }}>PIN {pin.letter}</span>
+                                      {idx > 0 && segmentRoutes[idx - 1] && (
+                                          <div style={{ fontSize: 11, color: '#6b7280', marginTop: 6, backgroundColor: 'white', padding: 8, borderRadius: 8 }}>
+                                              <div>← From PIN {segmentRoutes[idx - 1].from}</div>
+                                              <div style={{ color: '#3b82f6', fontWeight: 'bold' }}>{formatDist(segmentRoutes[idx - 1].distance)}</div>
+                                              <div style={{ color: '#16a34a', fontWeight: 'bold' }}>{formatTime(segmentRoutes[idx - 1].time)}</div>
+                                          </div>
+                                      )}
+                                  </div>
+                                  <button 
+                                    onClick={() => removePinSegment(pin.letter)}
+                                    style={{ 
+                                      width: 28, 
+                                      height: 28, 
+                                      borderRadius: '50%', 
+                                      backgroundColor: '#fee2e2', 
+                                      color: '#dc2626', 
+                                      border: 'none', 
+                                      cursor: 'pointer',
+                                      fontWeight: 'bold',
+                                      fontSize: 16,
+                                      display: 'flex',
+                                      alignItems: 'center',
+                                      justifyContent: 'center'
+                                    }}>
+                                    ✕
+                                  </button>
                               </div>
                           ))}
                       </div>
