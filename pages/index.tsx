@@ -66,6 +66,7 @@ export default function MapPage() {
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const routingControlRef = useRef<any>(null);
   const routePolylinesRef = useRef<any[]>([]);
+  const mainRoutePolylineRef = useRef<any>(null);
   const highlightLayerRef = useRef<any>(null);
   const userMarkerRef = useRef<any>(null);
   const accuracyCircleRef = useRef<any>(null);
@@ -296,7 +297,12 @@ export default function MapPage() {
 
   // Update pins - calculate routes from main destination
   useEffect(() => {
-    if (pinSegments.length === 0 || !mainDestination) {
+    if (!mainDestination || !userLocationRef.current) {
+      setSegmentRoutes([]);
+      return;
+    }
+
+    if (pinSegments.length === 0) {
       setSegmentRoutes([]);
       return;
     }
@@ -310,6 +316,37 @@ export default function MapPage() {
       previousLetter = pin.letter;
     });
   }, [pinSegments, mainDestination]);
+
+  // Update main route (user location to PIN A)
+  useEffect(() => {
+    const L = (window as any).L;
+    if (!mapRef.current || !L) return;
+
+    if (mainRoutePolylineRef.current) {
+      mainRoutePolylineRef.current.remove();
+      mainRoutePolylineRef.current = null;
+    }
+
+    if (mainDestination && userLocationRef.current) {
+      const coords = `${userLocationRef.current.lng},${userLocationRef.current.lat};${mainDestination.lng},${mainDestination.lat}`;
+      const profile = transportModeRef.current === 'walking' ? 'foot' : transportModeRef.current === 'cycling' ? 'bike' : 'car';
+      
+      fetch(`https://router.project-osrm.org/route/v1/${profile}/${coords}?overview=full&geometries=geojson`)
+        .then(res => res.json())
+        .then(data => {
+          if (data.routes && data.routes[0]) {
+            const coordinates = data.routes[0].geometry.coordinates.map((c: any) => [c[1], c[0]]);
+            mainRoutePolylineRef.current = L.polyline(coordinates, {
+              color: '#3b82f6',
+              weight: 4,
+              opacity: 0.9,
+              lineCap: 'round'
+            }).addTo(mapRef.current);
+          }
+        })
+        .catch(err => console.error('Main route fetch error:', err));
+    }
+  }, [mainDestination, transportMode, mapLoaded]);
 
   // Update segment polylines on map
   useEffect(() => {
@@ -331,7 +368,7 @@ export default function MapPage() {
       
       const polyline = L.polyline(segment.coordinates, {
         color: color,
-        weight: isHighlighted ? 10 : 6,
+        weight: isHighlighted ? 8 : 5,
         opacity: isHighlighted ? 1 : 0.7,
         lineCap: 'round'
       }).addTo(mapRef.current);
@@ -591,7 +628,8 @@ export default function MapPage() {
                                       fontSize: 16,
                                       display: 'flex',
                                       alignItems: 'center',
-                                      justifyContent: 'center'
+                                      justifyContent: 'center',
+                                      flexShrink: 0
                                     }}>
                                     ✕
                                   </button>
