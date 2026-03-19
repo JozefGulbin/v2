@@ -72,7 +72,6 @@ export default function MapPage() {
   const markerLayersRef = useRef<any[]>([]);
   const pinMarkerLayersRef = useRef<any[]>([]);
   const segmentPolylinesRef = useRef<any[]>([]);
-  const segmentRoutingControlsRef = useRef<any[]>([]);
   
   const userLocationRef = useRef<{ lat: number; lng: number, heading: number | null } | null>(null);
   const isNavigatingRef = useRef(false);
@@ -159,7 +158,7 @@ export default function MapPage() {
     };
 
     setTimeout(initMap, 500);
-  }, [viewMode, mapLoaded, pinSegments]);
+  }, [viewMode, mapLoaded]);
 
   const startGpsTracking = () => {
     if (!navigator.geolocation) {
@@ -231,63 +230,49 @@ export default function MapPage() {
     else accuracyCircleRef.current = L.circle([loc.lat, loc.lng], { radius: loc.accuracy, color: '#16a34a', fillOpacity: 0.05, weight: 0 }).addTo(mapRef.current);
   };
 
-  // Calculate segment routes when pins change
+  // Fetch segment routes via API
+  const fetchSegmentRoute = async (from: PinSegment, to: PinSegment, idx: number) => {
+    const coords = `${from.lng},${from.lat};${to.lng},${to.lat}`;
+    const profile = transportMode === 'walking' ? 'foot' : transportMode === 'cycling' ? 'bike' : 'car';
+    
+    try {
+      const response = await fetch(
+        `https://router.project-osrm.org/route/v1/${profile}/${coords}?overview=full&geometries=geojson`
+      );
+      const data = await response.json();
+      
+      if (data.routes && data.routes[0]) {
+        const route = data.routes[0];
+        const newRoute: SegmentRoute = {
+          from: from.letter,
+          to: to.letter,
+          distance: route.distance,
+          time: route.duration,
+          coordinates: route.geometry.coordinates.map((c: any) => [c[1], c[0]])
+        };
+        
+        setSegmentRoutes(prev => {
+          const updated = [...prev];
+          updated[idx] = newRoute;
+          return updated;
+        });
+      }
+    } catch (error) {
+      console.error('Route fetch error:', error);
+    }
+  };
+
+  // Update pins - calculate routes
   useEffect(() => {
-    if (!mapRef.current || pinSegments.length < 2 || !isBuilderMode) {
+    if (pinSegments.length < 2 || !isBuilderMode) {
       setSegmentRoutes([]);
       return;
     }
-    
-    const L = (window as any).L;
-
-    // Clean up old routing controls
-    segmentRoutingControlsRef.current.forEach(ctrl => {
-      if (mapRef.current) mapRef.current.removeControl(ctrl);
-    });
-    segmentRoutingControlsRef.current = [];
-
-    const newSegmentRoutes: SegmentRoute[] = [];
-    let completed = 0;
 
     pinSegments.forEach((pin, idx) => {
-      if (idx === 0) return;
-      
-      const fromPin = pinSegments[idx - 1];
-      const toPin = pin;
-      
-      const fromLatLng = L.latLng(fromPin.lat, fromPin.lng);
-      const toLatLng = L.latLng(toPin.lat, toPin.lng);
-      
-      let serviceUrl = transportMode === 'walking' ? 'https://routing.openstreetmap.de/routed-foot/route/v1' : (transportMode === 'cycling' ? 'https://routing.openstreetmap.de/routed-bike/route/v1' : 'https://router.project-osrm.org/route/v1');
-      
-      const control = L.Routing.control({
-          waypoints: [fromLatLng, toLatLng],
-          router: L.Routing.osrmv1({ serviceUrl, profile: 'driving' }),
-          lineOptions: { styles: [{ color: 'transparent', opacity: 0 }] },
-          createMarker: () => null,
-          show: false,
-          fitSelectedRoutes: false
-      }).addTo(mapRef.current);
-
-      segmentRoutingControlsRef.current.push(control);
-
-      control.on('routesfound', (e: any) => {
-          if (e.routes.length > 0) {
-            const route = e.routes[0];
-            newSegmentRoutes[idx - 1] = {
-              from: fromPin.letter,
-              to: toPin.letter,
-              distance: route.summary.totalDistance,
-              time: route.summary.totalTime,
-              coordinates: route.coordinates
-            };
-            
-            completed++;
-            if (completed === pinSegments.length - 1) {
-              setSegmentRoutes([...newSegmentRoutes]);
-            }
-          }
-      });
+      if (idx > 0) {
+        fetchSegmentRoute(pinSegments[idx - 1], pin, idx - 1);
+      }
     });
   }, [pinSegments, transportMode, isBuilderMode]);
 
@@ -304,6 +289,7 @@ export default function MapPage() {
     segmentPolylinesRef.current = [];
 
     segmentRoutes.forEach((segment, idx) => {
+      if (!segment || !segment.coordinates) return;
       const colors = ['#ff6b6b', '#4ecdc4', '#45b7d1', '#f9ca24', '#6c5ce7'];
       const color = colors[idx % colors.length];
       
