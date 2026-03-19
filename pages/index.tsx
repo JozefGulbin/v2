@@ -48,7 +48,7 @@ export default function MapPage() {
   const [selectedRouteIndex, setSelectedRouteIndex] = useState(0);
   const [userLocation, setUserLocation] = useState<{ lat: number; lng: number, accuracy: number, speed: number | null, heading: number | null } | null>(null);
   const [isBuilderMode, setIsBuilderMode] = useState(false); 
-  const [waypoints, setWaypoints] = useState<{lat: number, lng: number}[]>([]);
+  const [mainDestination, setMainDestination] = useState<{lat: number, lng: number} | null>(null);
   const [pinSegments, setPinSegments] = useState<PinSegment[]>([]);
   const [segmentRoutes, setSegmentRoutes] = useState<SegmentRoute[]>([]);
   const [navStats, setNavStats] = useState({ speed: 0, distanceRem: 0, timeRem: 0, pace: '--:--', calories: 0 });
@@ -73,8 +73,7 @@ export default function MapPage() {
   const markerLayersRef = useRef<any[]>([]);
   const pinMarkerLayersRef = useRef<any[]>([]);
   const segmentPolylinesRef = useRef<any[]>([]);
-  const pinSegmentsRef = useRef<PinSegment[]>([]);
-  const pinALocationRef = useRef<{ lat: number; lng: number } | null>(null);
+  const mainDestinationMarkerRef = useRef<any>(null);
   
   const userLocationRef = useRef<{ lat: number; lng: number, heading: number | null } | null>(null);
   const isNavigatingRef = useRef(false);
@@ -95,8 +94,6 @@ export default function MapPage() {
   useEffect(() => { isRecordingRef.current = isRecording; }, [isRecording]);
 
   useEffect(() => { isBuilderModeRef.current = isBuilderMode; }, [isBuilderMode]);
-  
-  useEffect(() => { pinSegmentsRef.current = pinSegments; }, [pinSegments]);
   
   useEffect(() => { transportModeRef.current = transportMode; }, [transportMode]);
   
@@ -139,7 +136,8 @@ export default function MapPage() {
             if (highlightLayerRef.current) highlightLayerRef.current.remove();
             
             if (isBuilderModeRef.current) {
-              const currentPins = pinSegmentsRef.current;
+              // In builder mode: add extra stops (B, C, D, etc.)
+              const currentPins = pinSegments;
               const newPin: PinSegment = {
                 letter: String.fromCharCode(66 + currentPins.length),
                 lat: e.latlng.lat,
@@ -147,11 +145,13 @@ export default function MapPage() {
               };
               const updatedPins = [...currentPins, newPin];
               setPinSegments(updatedPins);
-              pinSegmentsRef.current = updatedPins;
             }
             else { 
-              setWaypoints([e.latlng]); 
-              setShowRouteSelector(false);
+              // Not in builder mode: set main destination (PIN A)
+              if (!mainDestination) {
+                setMainDestination({ lat: e.latlng.lat, lng: e.latlng.lng });
+                setNotification({ type: 'info', msg: 'Main destination set! Click PIN+ to add stops.' });
+              }
             }
         };
 
@@ -241,6 +241,27 @@ export default function MapPage() {
     else accuracyCircleRef.current = L.circle([loc.lat, loc.lng], { radius: loc.accuracy, color: '#16a34a', fillOpacity: 0.05, weight: 0 }).addTo(mapRef.current);
   };
 
+  // Update main destination marker
+  useEffect(() => {
+    const L = (window as any).L;
+    if (!mapRef.current || !L) return;
+
+    if (mainDestinationMarkerRef.current) {
+      mainDestinationMarkerRef.current.remove();
+      mainDestinationMarkerRef.current = null;
+    }
+
+    if (mainDestination) {
+      const icon = L.divIcon({ 
+        className: 'bg-transparent', 
+        html: `<div style="width: 50px; height: 50px; background: #0f172a; border: 4px solid white; border-radius: 50% 50% 50% 0; transform: rotate(-45deg); display: flex; align-items: center; justify-content: center; color: white; font-weight: 800; font-size: 20px; box-shadow: 0 4px 10px rgba(0,0,0,0.3);"><span style="transform: rotate(45deg);">A</span></div>`, 
+        iconSize: [50, 50], 
+        iconAnchor: [25, 50] 
+      });
+      mainDestinationMarkerRef.current = L.marker([mainDestination.lat, mainDestination.lng], { icon }).addTo(mapRef.current);
+    }
+  }, [mainDestination, mapLoaded]);
+
   // Fetch segment routes via API
   const fetchSegmentRoute = async (from: { lat: number; lng: number }, to: PinSegment, fromLetter: string, toIndex: number) => {
     const coords = `${from.lng},${from.lat};${to.lng},${to.lat}`;
@@ -273,21 +294,14 @@ export default function MapPage() {
     }
   };
 
-  // Update pins - calculate routes FROM PIN A
+  // Update pins - calculate routes from main destination
   useEffect(() => {
-    if (pinSegments.length === 0 || !userLocationRef.current) {
+    if (pinSegments.length === 0 || !mainDestination) {
       setSegmentRoutes([]);
-      pinALocationRef.current = null;
       return;
     }
 
-    // Set PIN A location as user's current location
-    pinALocationRef.current = {
-      lat: userLocationRef.current.lat,
-      lng: userLocationRef.current.lng
-    };
-
-    let previousPoint: { lat: number; lng: number } = pinALocationRef.current;
+    let previousPoint: { lat: number; lng: number } = mainDestination;
     let previousLetter = 'A';
 
     pinSegments.forEach((pin, idx) => {
@@ -295,7 +309,7 @@ export default function MapPage() {
       previousPoint = { lat: pin.lat, lng: pin.lng };
       previousLetter = pin.letter;
     });
-  }, [pinSegments]);
+  }, [pinSegments, mainDestination]);
 
   // Update segment polylines on map
   useEffect(() => {
@@ -360,9 +374,10 @@ export default function MapPage() {
     if (routingControlRef.current) mapRef.current.removeControl(routingControlRef.current);
     markerLayersRef.current.forEach(m => m.remove());
     markerLayersRef.current = [];
-    if (waypoints.length === 0 || !pinALocationRef.current) { setRoutes([]); return; }
+    
+    if (!mainDestination || !userLocationRef.current) { setRoutes([]); return; }
 
-    const planPoints = [L.latLng(pinALocationRef.current.lat, pinALocationRef.current.lng), ...waypoints.map(w => L.latLng(w.lat, w.lng))];
+    const planPoints = [L.latLng(userLocationRef.current.lat, userLocationRef.current.lng), L.latLng(mainDestination.lat, mainDestination.lng), ...pinSegments.map(p => L.latLng(p.lat, p.lng))];
     let serviceUrl = transportMode === 'walking' ? 'https://routing.openstreetmap.de/routed-foot/route/v1' : (transportMode === 'cycling' ? 'https://routing.openstreetmap.de/routed-bike/route/v1' : 'https://router.project-osrm.org/route/v1');
     const control = L.Routing.control({
         waypoints: planPoints, router: L.Routing.osrmv1({ serviceUrl, profile: 'driving' }),
@@ -371,10 +386,9 @@ export default function MapPage() {
 
     control.on('routesfound', (e: any) => {
         setRoutes(e.routes.map((r: any, i: number) => ({ id: i, summary: r.summary, coordinates: r.coordinates, instructions: r.instructions, waypoints: r.waypoints, waypointIndices: r.waypointIndices, routeObj: r })));
-        latLngsToMarkers(planPoints);
     });
     routingControlRef.current = control;
-  }, [waypoints, transportMode]);
+  }, [mainDestination, pinSegments, transportMode]);
 
   useEffect(() => {
     if (!mapRef.current || routes.length === 0) {
@@ -396,16 +410,6 @@ export default function MapPage() {
         routePolylinesRef.current.push(polyline);
     });
   }, [routes, selectedRouteIndex]);
-
-  const latLngsToMarkers = (latLngs: any[]) => {
-      const L = (window as any).L;
-      latLngs.forEach((latLng, i) => {
-          if (i === 0) return; 
-          const letter = String.fromCharCode(65 + i - 1);
-          const icon = L.divIcon({ className: 'bg-transparent', html: `<div style="width: 40px; height: 40px; background: #0f172a; border: 3px solid white; border-radius: 50% 50% 50% 0; transform: rotate(-45deg); display: flex; align-items: center; justify-content: center; color: white; font-weight: 800; font-size: 16px; box-shadow: 0 4px 10px rgba(0,0,0,0.3);"><span style="transform: rotate(45deg);">${letter}</span></div>`, iconSize: [40, 40], iconAnchor: [20, 40] });
-          markerLayersRef.current.push(L.marker(latLng, { icon }).addTo(mapRef.current));
-      });
-  };
 
   const getDistanceFromLatLonInM = (lat1: number, lon1: number, lat2: number, lon2: number) => {
     const R = 6371000; const dLat = (lat2 - lat1) * (Math.PI / 180); const dLon = (lon2 - lon1) * (Math.PI / 180);
@@ -510,10 +514,12 @@ export default function MapPage() {
                      <div style={{ width: 16, height: 16, borderRadius: '50%', backgroundColor: isRecording ? 'white' : '#dc2626', animation: isRecording ? 'pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite' : 'none' }}></div>
                      <span style={{ fontSize: 8, marginTop: 6, fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: 0.5 }}>Rec</span>
                   </button>
-                  <button onClick={() => { setIsBuilderMode(!isBuilderMode); if (isBuilderMode) { setPinSegments([]); setSegmentRoutes([]); setHighlightedSegmentIndex(null); pinMarkerLayersRef.current.forEach(m => m.remove()); pinMarkerLayersRef.current = []; segmentPolylinesRef.current.forEach(p => p.remove()); segmentPolylinesRef.current = []; } }} style={{ width: 64, height: 64, borderRadius: 32, boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', border: `4px solid ${isBuilderMode ? '#d1fae5' : 'white'}`, backgroundColor: isBuilderMode ? '#10b981' : 'white', color: isBuilderMode ? 'white' : '#10b981', cursor: 'pointer', transition: 'all 0.3s' }}>
+                  {mainDestination && (
+                    <button onClick={() => { setIsBuilderMode(!isBuilderMode); if (isBuilderMode) { setPinSegments([]); setSegmentRoutes([]); setHighlightedSegmentIndex(null); pinMarkerLayersRef.current.forEach(m => m.remove()); pinMarkerLayersRef.current = []; segmentPolylinesRef.current.forEach(p => p.remove()); segmentPolylinesRef.current = []; } }} style={{ width: 64, height: 64, borderRadius: 32, boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', border: `4px solid ${isBuilderMode ? '#d1fae5' : 'white'}`, backgroundColor: isBuilderMode ? '#10b981' : 'white', color: isBuilderMode ? 'white' : '#10b981', cursor: 'pointer', transition: 'all 0.3s' }}>
                       <span style={{ fontSize: 24, fontWeight: 'bold' }}>{isBuilderMode ? '✓' : '+'}</span>
                       <span style={{ fontSize: 8, fontWeight: 'bold', textTransform: 'uppercase' }}>PIN</span>
-                  </button>
+                    </button>
+                  )}
                   <button onClick={() => mapRef.current?.locate({setView: true, maxZoom: 15, enableHighAccuracy: true})} style={{ width: 64, height: 64, backgroundColor: '#16a34a', border: '4px solid #86efac', borderRadius: 32, boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: 'white', cursor: 'pointer', transition: 'all 0.3s' }}>
                       <span style={{ fontSize: 20 }}>📍</span>
                       <span style={{ fontSize: 8, fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: 0.5 }}>HERE</span>
@@ -580,7 +586,7 @@ export default function MapPage() {
                   </div>
               )}
 
-              {routes.length > 0 && !isBuilderMode && (
+              {mainDestination && routes.length > 0 && !isBuilderMode && (
                   <div style={{ position: 'absolute', bottom: 40, right: 32, zIndex: 1000, width: '100%', maxWidth: 420, pointerEvents: 'none', display: 'flex', flexDirection: 'column', gap: 16, alignItems: 'flex-end' }}>
                       {showRouteSelector && (
                           <div style={{ pointerEvents: 'auto', backgroundColor: 'rgba(255,255,255,0.97)', backdropFilter: 'blur(12px)', borderRadius: 56, padding: 28, boxShadow: '0 25px 40px -5px rgba(0,0,0,0.15)', maxHeight: '55vh', overflow: 'auto', border: '2px solid white', width: '100%' }}>
@@ -626,8 +632,8 @@ export default function MapPage() {
                               <span style={{ fontSize: 10, fontWeight: 'bold', textTransform: 'uppercase', color: '#9ca3af', letterSpacing: 1.2, marginTop: 4 }}>{routes.length} ROUTE{routes.length !== 1 ? 'S' : ''} {showRouteSelector ? '▲' : '▼'}</span>
                           </div>
                           <div style={{ display: 'flex', gap: 12 }}>
-                              <button onClick={() => { setWaypoints([]); setRoutes([]); setShowRouteSelector(false); }} style={{ width: 52, height: 52, borderRadius: '50%', backgroundColor: '#f3f4f6', color: '#d1d5db', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16, border: 'none', cursor: 'pointer', transition: 'all 0.2s' }}>✕</button>
-                              <button onClick={() => { setViewMode('navigation'); destinationRef.current = pinALocationRef.current; }} style={{ height: 52, paddingLeft: 36, paddingRight: 36, backgroundColor: '#3b82f6', color: 'white', borderRadius: '50%', fontWeight: 'bold', fontSize: 16, boxShadow: '0 10px 15px -3px rgba(59, 130, 246, 0.3)', cursor: 'pointer', border: 'none', transition: 'all 0.3s', whiteSpace: 'nowrap' }}>GO</button>
+                              <button onClick={() => { setMainDestination(null); setPinSegments([]); setRoutes([]); setShowRouteSelector(false); setHighlightedSegmentIndex(null); }} style={{ width: 52, height: 52, borderRadius: '50%', backgroundColor: '#f3f4f6', color: '#d1d5db', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16, border: 'none', cursor: 'pointer', transition: 'all 0.2s' }}>✕</button>
+                              <button onClick={() => { setViewMode('navigation'); destinationRef.current = mainDestination; }} style={{ height: 52, paddingLeft: 36, paddingRight: 36, backgroundColor: '#3b82f6', color: 'white', borderRadius: '50%', fontWeight: 'bold', fontSize: 16, boxShadow: '0 10px 15px -3px rgba(59, 130, 246, 0.3)', cursor: 'pointer', border: 'none', transition: 'all 0.3s', whiteSpace: 'nowrap' }}>GO</button>
                           </div>
                       </div>
                   </div>
