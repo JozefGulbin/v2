@@ -65,7 +65,6 @@ export default function MapPage() {
   const gpsWatchId = useRef<number | null>(null);
   const markerLayersRef = useRef<any[]>([]);
   const pinMarkerLayersRef = useRef<any[]>([]);
-  const hasInitializedRef = useRef(false);
   
   const userLocationRef = useRef<{ lat: number; lng: number, heading: number | null } | null>(null);
   const isNavigatingRef = useRef(false);
@@ -120,6 +119,8 @@ export default function MapPage() {
         map.on('click', (e: any) => {
             if (isNavigatingRef.current) return;
             if (highlightLayerRef.current) highlightLayerRef.current.remove();
+            
+            // PIN+ mode: add multiple pins (A, B, C...)
             if (isBuilderMode) {
               const newPin: PinSegment = {
                 letter: String.fromCharCode(65 + pinSegments.length),
@@ -128,6 +129,7 @@ export default function MapPage() {
               };
               setPinSegments([...pinSegments, newPin]);
             }
+            // Regular click: set single destination for quick route
             else { 
               setWaypoints([e.latlng]); 
               setShowRouteSelector(false);
@@ -146,7 +148,7 @@ export default function MapPage() {
     };
 
     setTimeout(initMap, 500);
-  }, [viewMode, mapLoaded, isBuilderMode, pinSegments]);
+  }, [viewMode, mapLoaded]);
 
   const startGpsTracking = () => {
     if (!navigator.geolocation) {
@@ -159,15 +161,6 @@ export default function MapPage() {
         const newLoc = { lat: latitude, lng: longitude, accuracy, speed, heading };
         setUserLocation(newLoc);
         updateUserMarker(newLoc);
-
-        if (!hasInitializedRef.current && viewMode === 'map' && mapRef.current) {
-            hasInitializedRef.current = true;
-            const defaultDest = {
-                lat: latitude + 0.004, 
-                lng: longitude + 0.005
-            };
-            setWaypoints([defaultDest]);
-        }
 
         if (isRecordingRef.current) {
             setRecordedPath(prev => {
@@ -379,7 +372,7 @@ export default function MapPage() {
 
         {viewMode === 'landing' && (
           <SpringLandingPage 
-            onEikime={() => { hasInitializedRef.current = false; setViewMode('map'); }} 
+            onEikime={() => { setViewMode('map'); }} 
             onMarsrutai={() => setViewMode('history')} 
             onSos={() => setViewMode('lost')} 
           />
