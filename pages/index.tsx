@@ -72,12 +72,14 @@ export default function MapPage() {
   const markerLayersRef = useRef<any[]>([]);
   const pinMarkerLayersRef = useRef<any[]>([]);
   const segmentPolylinesRef = useRef<any[]>([]);
+  const pinSegmentsRef = useRef<PinSegment[]>([]);
   
   const userLocationRef = useRef<{ lat: number; lng: number, heading: number | null } | null>(null);
   const isNavigatingRef = useRef(false);
   const destinationRef = useRef<{ lat: number; lng: number } | null>(null);
   const isRecordingRef = useRef(false);
   const isBuilderModeRef = useRef(false);
+  const transportModeRef = useRef<TransportMode>('walking');
 
   useEffect(() => {
     const localData = localStorage.getItem('taputapu_saved_routes');
@@ -91,6 +93,10 @@ export default function MapPage() {
   useEffect(() => { isRecordingRef.current = isRecording; }, [isRecording]);
 
   useEffect(() => { isBuilderModeRef.current = isBuilderMode; }, [isBuilderMode]);
+  
+  useEffect(() => { pinSegmentsRef.current = pinSegments; }, [pinSegments]);
+  
+  useEffect(() => { transportModeRef.current = transportMode; }, [transportMode]);
   
   useEffect(() => {
       isNavigatingRef.current = viewMode === 'navigation';
@@ -131,12 +137,15 @@ export default function MapPage() {
             if (highlightLayerRef.current) highlightLayerRef.current.remove();
             
             if (isBuilderModeRef.current) {
+              const currentPins = pinSegmentsRef.current;
               const newPin: PinSegment = {
-                letter: String.fromCharCode(65 + pinSegments.length),
+                letter: String.fromCharCode(65 + currentPins.length),
                 lat: e.latlng.lat,
                 lng: e.latlng.lng
               };
-              setPinSegments([...pinSegments, newPin]);
+              const updatedPins = [...currentPins, newPin];
+              setPinSegments(updatedPins);
+              pinSegmentsRef.current = updatedPins;
             }
             else { 
               setWaypoints([e.latlng]); 
@@ -233,13 +242,17 @@ export default function MapPage() {
   // Fetch segment routes via API
   const fetchSegmentRoute = async (from: PinSegment, to: PinSegment, idx: number) => {
     const coords = `${from.lng},${from.lat};${to.lng},${to.lat}`;
-    const profile = transportMode === 'walking' ? 'foot' : transportMode === 'cycling' ? 'bike' : 'car';
+    const profile = transportModeRef.current === 'walking' ? 'foot' : transportModeRef.current === 'cycling' ? 'bike' : 'car';
+    
+    console.log(`Fetching route ${from.letter} -> ${to.letter}:`, coords, profile);
     
     try {
       const response = await fetch(
         `https://router.project-osrm.org/route/v1/${profile}/${coords}?overview=full&geometries=geojson`
       );
       const data = await response.json();
+      
+      console.log(`Route response for ${from.letter}->${to.letter}:`, data);
       
       if (data.routes && data.routes[0]) {
         const route = data.routes[0];
@@ -250,6 +263,8 @@ export default function MapPage() {
           time: route.duration,
           coordinates: route.geometry.coordinates.map((c: any) => [c[1], c[0]])
         };
+        
+        console.log(`Segment ${from.letter}->${to.letter} distance: ${newRoute.distance}m, time: ${newRoute.time}s`);
         
         setSegmentRoutes(prev => {
           const updated = [...prev];
@@ -264,17 +279,19 @@ export default function MapPage() {
 
   // Update pins - calculate routes
   useEffect(() => {
-    if (pinSegments.length < 2 || !isBuilderMode) {
+    if (pinSegments.length < 2) {
       setSegmentRoutes([]);
       return;
     }
+
+    console.log('Calculating routes for pins:', pinSegments);
 
     pinSegments.forEach((pin, idx) => {
       if (idx > 0) {
         fetchSegmentRoute(pinSegments[idx - 1], pin, idx - 1);
       }
     });
-  }, [pinSegments, transportMode, isBuilderMode]);
+  }, [pinSegments]);
 
   // Update segment polylines on map
   useEffect(() => {
@@ -288,10 +305,17 @@ export default function MapPage() {
     segmentPolylinesRef.current.forEach(l => l.remove());
     segmentPolylinesRef.current = [];
 
+    console.log('Drawing segment routes:', segmentRoutes);
+
     segmentRoutes.forEach((segment, idx) => {
-      if (!segment || !segment.coordinates) return;
+      if (!segment || !segment.coordinates || segment.coordinates.length === 0) {
+        console.log(`Skipping segment ${idx} - no coordinates`);
+        return;
+      }
       const colors = ['#ff6b6b', '#4ecdc4', '#45b7d1', '#f9ca24', '#6c5ce7'];
       const color = colors[idx % colors.length];
+      
+      console.log(`Drawing segment ${idx} with ${segment.coordinates.length} points, color: ${color}`);
       
       const polyline = L.polyline(segment.coordinates, {
         color: color,
