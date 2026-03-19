@@ -60,6 +60,7 @@ export default function MapPage() {
   const [totalRecordedDist, setTotalRecordedDist] = useState(0);
   const [recordingStartTime, setRecordingStartTime] = useState<number | null>(null);
   const [mapLoaded, setMapLoaded] = useState(false);
+  const [highlightedSegmentIndex, setHighlightedSegmentIndex] = useState<number | null>(null);
 
   const mapRef = useRef<any>(null);
   const mapContainerRef = useRef<HTMLDivElement>(null);
@@ -73,6 +74,7 @@ export default function MapPage() {
   const pinMarkerLayersRef = useRef<any[]>([]);
   const segmentPolylinesRef = useRef<any[]>([]);
   const pinSegmentsRef = useRef<PinSegment[]>([]);
+  const pinALocationRef = useRef<{ lat: number; lng: number } | null>(null);
   
   const userLocationRef = useRef<{ lat: number; lng: number, heading: number | null } | null>(null);
   const isNavigatingRef = useRef(false);
@@ -138,9 +140,8 @@ export default function MapPage() {
             
             if (isBuilderModeRef.current) {
               const currentPins = pinSegmentsRef.current;
-              // Start naming from B (first pitstop), since A is the user location
               const newPin: PinSegment = {
-                letter: String.fromCharCode(66 + currentPins.length), // 66 = 'B'
+                letter: String.fromCharCode(66 + currentPins.length),
                 lat: e.latlng.lat,
                 lng: e.latlng.lng
               };
@@ -272,24 +273,25 @@ export default function MapPage() {
     }
   };
 
-  // Update pins - calculate routes from original PIN A (current location)
+  // Update pins - calculate routes FROM PIN A
   useEffect(() => {
     if (pinSegments.length === 0 || !userLocationRef.current) {
       setSegmentRoutes([]);
+      pinALocationRef.current = null;
       return;
     }
 
-    // Always start from user's current location (PIN A)
-    let previousPoint: { lat: number; lng: number } = {
+    // Set PIN A location as user's current location
+    pinALocationRef.current = {
       lat: userLocationRef.current.lat,
       lng: userLocationRef.current.lng
     };
+
+    let previousPoint: { lat: number; lng: number } = pinALocationRef.current;
     let previousLetter = 'A';
 
     pinSegments.forEach((pin, idx) => {
-      // Route from previous point to this pin
       fetchSegmentRoute(previousPoint, pin, previousLetter, idx);
-      // Update previous for next iteration
       previousPoint = { lat: pin.lat, lng: pin.lng };
       previousLetter = pin.letter;
     });
@@ -311,16 +313,17 @@ export default function MapPage() {
       if (!segment || !segment.coordinates || segment.coordinates.length === 0) return;
       const colors = ['#ff6b6b', '#4ecdc4', '#45b7d1', '#f9ca24', '#6c5ce7', '#a8e6cf'];
       const color = colors[idx % colors.length];
+      const isHighlighted = idx === highlightedSegmentIndex;
       
       const polyline = L.polyline(segment.coordinates, {
         color: color,
-        weight: 6,
-        opacity: 0.7,
+        weight: isHighlighted ? 10 : 6,
+        opacity: isHighlighted ? 1 : 0.7,
         lineCap: 'round'
       }).addTo(mapRef.current);
       segmentPolylinesRef.current.push(polyline);
     });
-  }, [segmentRoutes]);
+  }, [segmentRoutes, highlightedSegmentIndex]);
 
   // Update pin markers on map
   useEffect(() => {
@@ -343,12 +346,12 @@ export default function MapPage() {
 
   const removePinSegment = (letterToRemove: string) => {
     const updated = pinSegments.filter(p => p.letter !== letterToRemove);
-    // Rename remaining pins to maintain B, C, D order (starting from B)
     const renamed = updated.map((p, idx) => ({
       ...p,
-      letter: String.fromCharCode(66 + idx) // 66 = 'B'
+      letter: String.fromCharCode(66 + idx)
     }));
     setPinSegments(renamed);
+    setHighlightedSegmentIndex(null);
   };
 
   useEffect(() => {
@@ -357,9 +360,9 @@ export default function MapPage() {
     if (routingControlRef.current) mapRef.current.removeControl(routingControlRef.current);
     markerLayersRef.current.forEach(m => m.remove());
     markerLayersRef.current = [];
-    if (waypoints.length === 0 || !userLocationRef.current) { setRoutes([]); return; }
+    if (waypoints.length === 0 || !pinALocationRef.current) { setRoutes([]); return; }
 
-    const planPoints = [L.latLng(userLocationRef.current.lat, userLocationRef.current.lng), ...waypoints.map(w => L.latLng(w.lat, w.lng))];
+    const planPoints = [L.latLng(pinALocationRef.current.lat, pinALocationRef.current.lng), ...waypoints.map(w => L.latLng(w.lat, w.lng))];
     let serviceUrl = transportMode === 'walking' ? 'https://routing.openstreetmap.de/routed-foot/route/v1' : (transportMode === 'cycling' ? 'https://routing.openstreetmap.de/routed-bike/route/v1' : 'https://router.project-osrm.org/route/v1');
     const control = L.Routing.control({
         waypoints: planPoints, router: L.Routing.osrmv1({ serviceUrl, profile: 'driving' }),
@@ -507,7 +510,7 @@ export default function MapPage() {
                      <div style={{ width: 16, height: 16, borderRadius: '50%', backgroundColor: isRecording ? 'white' : '#dc2626', animation: isRecording ? 'pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite' : 'none' }}></div>
                      <span style={{ fontSize: 8, marginTop: 6, fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: 0.5 }}>Rec</span>
                   </button>
-                  <button onClick={() => { setIsBuilderMode(!isBuilderMode); if (isBuilderMode) { setPinSegments([]); setSegmentRoutes([]); pinMarkerLayersRef.current.forEach(m => m.remove()); pinMarkerLayersRef.current = []; segmentPolylinesRef.current.forEach(p => p.remove()); segmentPolylinesRef.current = []; } }} style={{ width: 64, height: 64, borderRadius: 32, boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', border: `4px solid ${isBuilderMode ? '#d1fae5' : 'white'}`, backgroundColor: isBuilderMode ? '#10b981' : 'white', color: isBuilderMode ? 'white' : '#10b981', cursor: 'pointer', transition: 'all 0.3s' }}>
+                  <button onClick={() => { setIsBuilderMode(!isBuilderMode); if (isBuilderMode) { setPinSegments([]); setSegmentRoutes([]); setHighlightedSegmentIndex(null); pinMarkerLayersRef.current.forEach(m => m.remove()); pinMarkerLayersRef.current = []; segmentPolylinesRef.current.forEach(p => p.remove()); segmentPolylinesRef.current = []; } }} style={{ width: 64, height: 64, borderRadius: 32, boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', border: `4px solid ${isBuilderMode ? '#d1fae5' : 'white'}`, backgroundColor: isBuilderMode ? '#10b981' : 'white', color: isBuilderMode ? 'white' : '#10b981', cursor: 'pointer', transition: 'all 0.3s' }}>
                       <span style={{ fontSize: 24, fontWeight: 'bold' }}>{isBuilderMode ? '✓' : '+'}</span>
                       <span style={{ fontSize: 8, fontWeight: 'bold', textTransform: 'uppercase' }}>PIN</span>
                   </button>
@@ -525,7 +528,21 @@ export default function MapPage() {
                               <span style={{ fontWeight: 'bold', color: '#111827', fontSize: 16 }}>PIN A (📍 START)</span>
                           </div>
                           {pinSegments.map((pin, idx) => (
-                              <div key={idx} style={{ backgroundColor: '#f3f4f6', padding: 12, borderRadius: 12, display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}>
+                              <div 
+                                key={idx} 
+                                onClick={() => setHighlightedSegmentIndex(highlightedSegmentIndex === idx ? null : idx)}
+                                style={{ 
+                                  backgroundColor: highlightedSegmentIndex === idx ? '#dbeafe' : '#f3f4f6', 
+                                  padding: 12, 
+                                  borderRadius: 12, 
+                                  display: 'flex', 
+                                  justifyContent: 'space-between', 
+                                  alignItems: 'flex-start', 
+                                  gap: 8,
+                                  cursor: 'pointer',
+                                  border: highlightedSegmentIndex === idx ? '2px solid #3b82f6' : '2px solid transparent',
+                                  transition: 'all 0.2s'
+                                }}>
                                   <div style={{ flex: 1 }}>
                                       <span style={{ fontWeight: 'bold', color: '#10b981', fontSize: 16 }}>PIN {pin.letter}</span>
                                       {segmentRoutes[idx] && (
@@ -537,7 +554,10 @@ export default function MapPage() {
                                       )}
                                   </div>
                                   <button 
-                                    onClick={() => removePinSegment(pin.letter)}
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      removePinSegment(pin.letter);
+                                    }}
                                     style={{ 
                                       width: 28, 
                                       height: 28, 
@@ -607,7 +627,7 @@ export default function MapPage() {
                           </div>
                           <div style={{ display: 'flex', gap: 12 }}>
                               <button onClick={() => { setWaypoints([]); setRoutes([]); setShowRouteSelector(false); }} style={{ width: 52, height: 52, borderRadius: '50%', backgroundColor: '#f3f4f6', color: '#d1d5db', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16, border: 'none', cursor: 'pointer', transition: 'all 0.2s' }}>✕</button>
-                              <button onClick={() => { setViewMode('navigation'); destinationRef.current = waypoints[waypoints.length - 1]; }} style={{ height: 52, paddingLeft: 36, paddingRight: 36, backgroundColor: '#3b82f6', color: 'white', borderRadius: '50%', fontWeight: 'bold', fontSize: 16, boxShadow: '0 10px 15px -3px rgba(59, 130, 246, 0.3)', cursor: 'pointer', border: 'none', transition: 'all 0.3s', whiteSpace: 'nowrap' }}>GO</button>
+                              <button onClick={() => { setViewMode('navigation'); destinationRef.current = pinALocationRef.current; }} style={{ height: 52, paddingLeft: 36, paddingRight: 36, backgroundColor: '#3b82f6', color: 'white', borderRadius: '50%', fontWeight: 'bold', fontSize: 16, boxShadow: '0 10px 15px -3px rgba(59, 130, 246, 0.3)', cursor: 'pointer', border: 'none', transition: 'all 0.3s', whiteSpace: 'nowrap' }}>GO</button>
                           </div>
                       </div>
                   </div>
