@@ -74,12 +74,12 @@ export default function MapPage() {
   const pinMarkerLayersRef = useRef<any[]>([]);
   const segmentPolylinesRef = useRef<any[]>([]);
   const mainDestinationMarkerRef = useRef<any>(null);
+  const isBuilderModeRef = useRef(false);
   
   const userLocationRef = useRef<{ lat: number; lng: number, heading: number | null } | null>(null);
   const isNavigatingRef = useRef(false);
   const destinationRef = useRef<{ lat: number; lng: number } | null>(null);
   const isRecordingRef = useRef(false);
-  const isBuilderModeRef = useRef(false);
   const transportModeRef = useRef<TransportMode>('walking');
 
   useEffect(() => {
@@ -137,14 +137,14 @@ export default function MapPage() {
             
             if (isBuilderModeRef.current) {
               // In builder mode: add extra stops (B, C, D, etc.)
-              const currentPins = pinSegments;
-              const newPin: PinSegment = {
-                letter: String.fromCharCode(66 + currentPins.length),
-                lat: e.latlng.lat,
-                lng: e.latlng.lng
-              };
-              const updatedPins = [...currentPins, newPin];
-              setPinSegments(updatedPins);
+              setPinSegments(prev => {
+                const newPin: PinSegment = {
+                  letter: String.fromCharCode(66 + prev.length), // 66 = 'B'
+                  lat: e.latlng.lat,
+                  lng: e.latlng.lng
+                };
+                return [...prev, newPin];
+              });
             }
             else { 
               // Not in builder mode: set main destination (PIN A)
@@ -359,12 +359,14 @@ export default function MapPage() {
   }, [pinSegments, isBuilderMode]);
 
   const removePinSegment = (letterToRemove: string) => {
-    const updated = pinSegments.filter(p => p.letter !== letterToRemove);
-    const renamed = updated.map((p, idx) => ({
-      ...p,
-      letter: String.fromCharCode(66 + idx)
-    }));
-    setPinSegments(renamed);
+    setPinSegments(prev => {
+      const updated = prev.filter(p => p.letter !== letterToRemove);
+      const renamed = updated.map((p, idx) => ({
+        ...p,
+        letter: String.fromCharCode(66 + idx)
+      }));
+      return renamed;
+    });
     setHighlightedSegmentIndex(null);
   };
 
@@ -530,8 +532,21 @@ export default function MapPage() {
                   <div style={{ position: 'absolute', bottom: 40, left: 32, zIndex: 1000, pointerEvents: 'auto', backgroundColor: 'rgba(255,255,255,0.97)', backdropFilter: 'blur(12px)', borderRadius: 40, padding: 20, boxShadow: '0 10px 30px rgba(0,0,0,0.15)', border: '2px solid white', maxWidth: 320 }}>
                       <h4 style={{ color: '#111827', fontWeight: 'bold', marginBottom: 16, fontSize: 14 }}>📍 PITSTOPS</h4>
                       <div style={{ display: 'flex', flexDirection: 'column', gap: 12, maxHeight: 300, overflowY: 'auto' }}>
-                          <div style={{ backgroundColor: '#f3f4f6', padding: 12, borderRadius: 12, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <div 
+                            onClick={() => { setViewMode('navigation'); destinationRef.current = mainDestination; }}
+                            style={{ 
+                              backgroundColor: '#f3f4f6', 
+                              padding: 12, 
+                              borderRadius: 12, 
+                              display: 'flex', 
+                              justifyContent: 'space-between', 
+                              alignItems: 'center',
+                              cursor: 'pointer',
+                              transition: 'all 0.2s',
+                              border: '2px solid #3b82f6'
+                            }}>
                               <span style={{ fontWeight: 'bold', color: '#111827', fontSize: 16 }}>PIN A (📍 START)</span>
+                              <span style={{ fontSize: 20, color: '#3b82f6' }}>▶</span>
                           </div>
                           {pinSegments.map((pin, idx) => (
                               <div 
