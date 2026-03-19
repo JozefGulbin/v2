@@ -161,7 +161,77 @@ export default function MapPage() {
     };
 
     setTimeout(initMap, 500);
-  }, [viewMode, mapLoaded]);
+  }, [viewMode, mapLoaded, pinSegments]);
+
+  const startGpsTracking = () => {
+    if (!navigator.geolocation) {
+      setNotification({ type: 'error', msg: 'GPS not available' });
+      return;
+    }
+
+    const onGeoSuccess = (pos: GeolocationPosition) => {
+        const { latitude, longitude, accuracy, speed, heading } = pos.coords;
+        const newLoc = { lat: latitude, lng: longitude, accuracy, speed, heading };
+        setUserLocation(newLoc);
+        updateUserMarker(newLoc);
+
+        if (isRecordingRef.current) {
+            setRecordedPath(prev => {
+                const last = prev[prev.length - 1];
+                if (!last || getDistanceFromLatLonInM(latitude, longitude, last.lat, last.lng) > 3) {
+                    if (last) setTotalRecordedDist(d => d + getDistanceFromLatLonInM(latitude, longitude, last.lat, last.lng));
+                    return [...prev, { lat: latitude, lng: longitude }];
+                }
+                return prev;
+            });
+        }
+
+        if (isNavigatingRef.current && mapRef.current) {
+            if (heading !== null && mapContainerRef.current) {
+                mapContainerRef.current.style.transform = `translate(-50%, -50%) rotate(${-heading}deg)`;
+                mapContainerRef.current.style.transition = 'transform 1.0s cubic-bezier(0.4, 0, 0.2, 1)';
+            }
+            mapRef.current.setView([latitude, longitude], 18, { animate: true });
+            const distRem = destinationRef.current ? getDistanceFromLatLonInM(latitude, longitude, destinationRef.current.lat, destinationRef.current.lng) : 0;
+            setNavStats({ speed: speed ? Math.round(speed * 3.6) : 0, distanceRem: distRem, timeRem: speed && speed > 0 ? distRem / speed : distRem / 1.4, pace: calculatePace(speed), calories: Math.round((totalRecordedDist / 1000) * 65) });
+        }
+    };
+    
+    const onGeoError = (error: GeolocationPositionError) => {
+      console.error('GPS error:', error.message);
+    };
+    
+    gpsWatchId.current = navigator.geolocation.watchPosition(onGeoSuccess, onGeoError, { 
+      enableHighAccuracy: true, 
+      maximumAge: 0, 
+      timeout: 10000 
+    });
+  };
+
+  const updateUserMarker = (loc: any) => {
+    const L = (window as any).L;
+    if (!mapRef.current || !L) return;
+    const isNav = isNavigatingRef.current;
+    
+    const html = isNav 
+      ? `<div class="user-marker-arrow" style="transform: rotate(${loc.heading || 0}deg); transition: transform 0.4s">
+           <div style="width: 0; height: 0; border-left: 12px solid transparent; border-right: 12px solid transparent; border-bottom: 24px solid #16a34a; filter: drop-shadow(0 2px 4px rgba(0,0,0,0.3));"></div>
+         </div>`
+      : `<div class="user-marker-circle">
+           <div style="width: 24px; height: 24px; background: #16a34a; border-radius: 50%; border: 4px solid white; box-shadow: 0 4px 12px rgba(0,0,0,0.3); position: relative;">
+              <div style="position: absolute; inset: -12px; background: #22c55e; border-radius: 50%; animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite; opacity: 0.3;"></div>
+           </div>
+         </div>`;
+
+    if (!userMarkerRef.current) {
+      userMarkerRef.current = L.marker([loc.lat, loc.lng], { icon: L.divIcon({ className: 'bg-transparent', html, iconSize: [0, 0] }), zIndexOffset: 1000 }).addTo(mapRef.current);
+    } else {
+      userMarkerRef.current.setLatLng([loc.lat, loc.lng]);
+      userMarkerRef.current.setIcon(L.divIcon({ className: 'bg-transparent', html, iconSize: [0, 0] }));
+    }
+    if (accuracyCircleRef.current) accuracyCircleRef.current.setLatLng([loc.lat, loc.lng]).setRadius(loc.accuracy);
+    else accuracyCircleRef.current = L.circle([loc.lat, loc.lng], { radius: loc.accuracy, color: '#16a34a', fillOpacity: 0.05, weight: 0 }).addTo(mapRef.current);
+  };
 
   // Handle pin segment routing
   useEffect(() => {
@@ -235,76 +305,6 @@ export default function MapPage() {
       segmentPolylinesRef.current.push(polyline);
     });
   }, [segmentRoutes]);
-
-  const startGpsTracking = () => {
-    if (!navigator.geolocation) {
-      setNotification({ type: 'error', msg: 'GPS not available' });
-      return;
-    }
-
-    const onGeoSuccess = (pos: GeolocationPosition) => {
-        const { latitude, longitude, accuracy, speed, heading } = pos.coords;
-        const newLoc = { lat: latitude, lng: longitude, accuracy, speed, heading };
-        setUserLocation(newLoc);
-        updateUserMarker(newLoc);
-
-        if (isRecordingRef.current) {
-            setRecordedPath(prev => {
-                const last = prev[prev.length - 1];
-                if (!last || getDistanceFromLatLonInM(latitude, longitude, last.lat, last.lng) > 3) {
-                    if (last) setTotalRecordedDist(d => d + getDistanceFromLatLonInM(latitude, longitude, last.lat, last.lng));
-                    return [...prev, { lat: latitude, lng: longitude }];
-                }
-                return prev;
-            });
-        }
-
-        if (isNavigatingRef.current && mapRef.current) {
-            if (heading !== null && mapContainerRef.current) {
-                mapContainerRef.current.style.transform = `translate(-50%, -50%) rotate(${-heading}deg)`;
-                mapContainerRef.current.style.transition = 'transform 1.0s cubic-bezier(0.4, 0, 0.2, 1)';
-            }
-            mapRef.current.setView([latitude, longitude], 18, { animate: true });
-            const distRem = destinationRef.current ? getDistanceFromLatLonInM(latitude, longitude, destinationRef.current.lat, destinationRef.current.lng) : 0;
-            setNavStats({ speed: speed ? Math.round(speed * 3.6) : 0, distanceRem: distRem, timeRem: speed && speed > 0 ? distRem / speed : distRem / 1.4, pace: calculatePace(speed), calories: Math.round((totalRecordedDist / 1000) * 65) });
-        }
-    };
-    
-    const onGeoError = (error: GeolocationPositionError) => {
-      console.error('GPS error:', error.message);
-    };
-    
-    gpsWatchId.current = navigator.geolocation.watchPosition(onGeoSuccess, onGeoError, { 
-      enableHighAccuracy: true, 
-      maximumAge: 0, 
-      timeout: 10000 
-    });
-  };
-
-  const updateUserMarker = (loc: any) => {
-    const L = (window as any).L;
-    if (!mapRef.current || !L) return;
-    const isNav = isNavigatingRef.current;
-    
-    const html = isNav 
-      ? `<div class="user-marker-arrow" style="transform: rotate(${loc.heading || 0}deg); transition: transform 0.4s">
-           <div style="width: 0; height: 0; border-left: 12px solid transparent; border-right: 12px solid transparent; border-bottom: 24px solid #16a34a; filter: drop-shadow(0 2px 4px rgba(0,0,0,0.3));"></div>
-         </div>`
-      : `<div class="user-marker-circle">
-           <div style="width: 24px; height: 24px; background: #16a34a; border-radius: 50%; border: 4px solid white; box-shadow: 0 4px 12px rgba(0,0,0,0.3); position: relative;">
-              <div style="position: absolute; inset: -12px; background: #22c55e; border-radius: 50%; animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite; opacity: 0.3;"></div>
-           </div>
-         </div>`;
-
-    if (!userMarkerRef.current) {
-      userMarkerRef.current = L.marker([loc.lat, loc.lng], { icon: L.divIcon({ className: 'bg-transparent', html, iconSize: [0, 0] }), zIndexOffset: 1000 }).addTo(mapRef.current);
-    } else {
-      userMarkerRef.current.setLatLng([loc.lat, loc.lng]);
-      userMarkerRef.current.setIcon(L.divIcon({ className: 'bg-transparent', html, iconSize: [0, 0] }));
-    }
-    if (accuracyCircleRef.current) accuracyCircleRef.current.setLatLng([loc.lat, loc.lng]).setRadius(loc.accuracy);
-    else accuracyCircleRef.current = L.circle([loc.lat, loc.lng], { radius: loc.accuracy, color: '#16a34a', fillOpacity: 0.05, weight: 0 }).addTo(mapRef.current);
-  };
 
   // Update pin markers on map
   useEffect(() => {
