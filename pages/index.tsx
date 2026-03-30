@@ -64,6 +64,7 @@ export default function MapPage() {
 
   const mapRef = useRef<any>(null);
   const mapContainerRef = useRef<HTMLDivElement>(null);
+  const mapContainerNavRef = useRef<HTMLDivElement>(null);
   const routingControlRef = useRef<any>(null);
   const routePolylinesRef = useRef<any[]>([]);
   const mainRoutePolylineRef = useRef<any>(null);
@@ -102,6 +103,9 @@ export default function MapPage() {
   useEffect(() => {
       isNavigatingRef.current = viewMode === 'navigation';
       if (viewMode === 'map' && mapRef.current) {
+          setTimeout(() => mapRef.current.invalidateSize(), 500);
+      }
+      if (viewMode === 'navigation' && mapRef.current) {
           setTimeout(() => mapRef.current.invalidateSize(), 500);
       }
       if (viewMode !== 'navigation' && mapContainerRef.current) {
@@ -201,10 +205,10 @@ export default function MapPage() {
   };
 
   useEffect(() => {
-    if (viewMode !== 'map' || mapLoaded) return;
+    if (!mapLoaded) return;
 
     const initMap = async () => {
-      if (typeof window === 'undefined' || !mapContainerRef.current) return;
+      if (typeof window === 'undefined') return;
       
       if (!(window as any).L) {
         setTimeout(initMap, 100);
@@ -215,8 +219,11 @@ export default function MapPage() {
       
       if (mapRef.current) return;
 
+      const container = viewMode === 'navigation' ? mapContainerNavRef.current : mapContainerRef.current;
+      if (!container) return;
+
       try {
-        const map = L.map(mapContainerRef.current, { 
+        const map = L.map(container, { 
           zoomControl: false, 
           attributionControl: false,
           preferCanvas: true
@@ -249,8 +256,6 @@ export default function MapPage() {
         map.on('click', handleMapClick);
 
         mapRef.current = map;
-        setMapLoaded(true);
-        
         startGpsTracking();
         map.locate({ setView: true, maxZoom: 15, enableHighAccuracy: true });
       } catch (error) {
@@ -259,7 +264,13 @@ export default function MapPage() {
       }
     };
 
-    setTimeout(initMap, 500);
+    setTimeout(initMap, 300);
+  }, [mapLoaded]);
+
+  useEffect(() => {
+    if (viewMode === 'map' || viewMode === 'navigation') {
+      if (!mapLoaded) setMapLoaded(true);
+    }
   }, [viewMode, mapLoaded]);
 
   const startGpsTracking = () => {
@@ -367,7 +378,7 @@ export default function MapPage() {
       });
       mainDestinationMarkerRef.current = L.marker([mainDestination.lat, mainDestination.lng], { icon }).addTo(mapRef.current);
     }
-  }, [mainDestination, mapLoaded]);
+  }, [mainDestination]);
 
   useEffect(() => {
     const L = (window as any).L;
@@ -378,7 +389,6 @@ export default function MapPage() {
       mainRoutePolylineRef.current = null;
     }
 
-    // Only show main route in navigation mode
     if (mainDestination && userLocationRef.current && viewMode === 'navigation') {
       const coords = `${userLocationRef.current.lng},${userLocationRef.current.lat};${mainDestination.lng},${mainDestination.lat}`;
       const profile = transportModeRef.current === 'walking' ? 'foot' : transportModeRef.current === 'cycling' ? 'bike' : 'car';
@@ -399,7 +409,7 @@ export default function MapPage() {
         })
         .catch(err => console.error('Main route fetch error:', err));
     }
-  }, [mainDestination, transportMode, mapLoaded, viewMode]);
+  }, [mainDestination, transportMode, viewMode]);
 
   const fetchSegmentRoute = async (from: { lat: number; lng: number }, to: PinSegment, fromLetter: string, toIndex: number) => {
     const coords = `${from.lng},${from.lat};${to.lng},${to.lat}`;
@@ -542,7 +552,6 @@ export default function MapPage() {
         const isActive = i === selectedRouteIndex;
         const isNavigating = viewMode === 'navigation';
         
-        // Only show selected route during navigation
         if (isNavigating && !isActive) {
           return;
         }
@@ -625,7 +634,6 @@ export default function MapPage() {
           @keyframes float { 0%, 100% { transform: translateY(0px); } 50% { transform: translateY(-20px); } }
           .flower-petal { position: absolute; color: #ffb6c1; user-select: none; z-index: 9999; pointer-events: none; font-size: 1.8rem; animation: flowerpetal 12s linear infinite; opacity: 0.8; }
           .no-scrollbar::-webkit-scrollbar { display: none; }
-          .forest-tree { position: absolute; user-select: none; pointer-events: none; }
           .forest-animal { position: absolute; user-select: none; pointer-events: none; animation: float 4s ease-in-out infinite; }
         `}</style>
       </Head>
@@ -634,12 +642,9 @@ export default function MapPage() {
 
         {viewMode === 'landing' && (
           <>
-            {/* Forest Background */}
             <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(180deg, #87ceeb 0%, #98fb98 40%, #228b22 100%)', zIndex: 0 }}>
-              {/* Sky gradient */}
             </div>
 
-            {/* Background Trees */}
             <div style={{ position: 'absolute', bottom: 0, left: '5%', width: '90px', height: '200px', zIndex: 1 }}>
               <div style={{ width: '100%', height: '100%', background: 'linear-gradient(180deg, transparent 0%, #1b4d1b 100%)', clipPath: 'polygon(50% 0%, 100% 38%, 82% 38%, 100% 55%, 80% 55%, 100% 72%, 75% 72%, 100% 90%, 50% 100%, 0% 90%, 25% 72%, 0% 72%, 20% 55%, 0% 55%, 18% 38%, 0% 38%)', opacity: 0.6 }} />
             </div>
@@ -647,23 +652,18 @@ export default function MapPage() {
               <div style={{ width: '100%', height: '100%', background: 'linear-gradient(180deg, transparent 0%, #0d3d0d 100%)', clipPath: 'polygon(50% 0%, 100% 35%, 85% 35%, 100% 50%, 82% 50%, 100% 68%, 78% 68%, 100% 85%, 50% 100%, 0% 85%, 22% 68%, 0% 68%, 18% 50%, 0% 50%, 15% 35%, 0% 35%)', opacity: 0.7 }} />
             </div>
 
-            {/* Lake */}
             <div style={{ position: 'absolute', bottom: '15%', left: '15%', width: '200px', height: '120px', background: 'radial-gradient(ellipse at 40% 30%, rgba(100, 200, 255, 0.6), rgba(30, 120, 200, 0.8))', borderRadius: '50%', zIndex: 2, filter: 'blur(2px)' }} />
 
-            {/* Animals */}
             <div className="forest-animal" style={{ bottom: '35%', left: '20%', fontSize: '60px', zIndex: 3, animationDelay: '0s' }}>🦌</div>
             <div className="forest-animal" style={{ bottom: '28%', right: '18%', fontSize: '50px', zIndex: 3, animationDelay: '1s' }}>🦉</div>
             <div className="forest-animal" style={{ bottom: '40%', left: '60%', fontSize: '45px', zIndex: 3, animationDelay: '2s' }}>🦊</div>
 
-            {/* Center Buttons */}
             <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 40, zIndex: 10 }}>
-              {/* Title */}
               <div style={{ marginBottom: 20, textAlign: 'center' }}>
                 <h1 style={{ fontSize: 56, fontWeight: 'bold', color: '#0f5f0f', textShadow: '2px 2px 4px rgba(0,0,0,0.2)' }}>TapuTapu</h1>
                 <p style={{ fontSize: 16, color: '#1b4d1b', marginTop: 8, fontStyle: 'italic' }}>Navigate with nature</p>
               </div>
 
-              {/* Button 1 - Eikime */}
               <button 
                 onClick={() => setViewMode('map')}
                 style={{ 
@@ -694,7 +694,6 @@ export default function MapPage() {
                 🗺️ Eikime!
               </button>
 
-              {/* Button 2 - jau buvau */}
               <button 
                 onClick={() => setViewMode('history')}
                 style={{ 
@@ -725,7 +724,6 @@ export default function MapPage() {
                 📚 Jau buvau!
               </button>
 
-              {/* Button 3 - SOS */}
               <button 
                 onClick={() => setViewMode('lost')}
                 style={{ 
@@ -942,49 +940,53 @@ export default function MapPage() {
         )}
 
         {viewMode === 'navigation' && (
-          <div style={{ position: 'absolute', inset: 0, zIndex: 1000, display: 'flex', flexDirection: 'column', alignItems: 'flex-start', justifyContent: 'flex-start', paddingTop: 24, paddingLeft: 24, pointerEvents: 'none' }}>
-              <button 
-                onClick={() => setViewMode('map')} 
-                style={{ 
-                  pointerEvents: 'auto',
-                  width: 60, 
-                  height: 60, 
-                  borderRadius: '20px', 
-                  backgroundColor: '#a78bfa',
-                  color: 'white', 
-                  border: '3px solid white',
-                  boxShadow: '0 8px 20px rgba(167, 139, 250, 0.3)',
-                  display: 'flex', 
-                  alignItems: 'center', 
-                  justifyContent: 'center',
-                  cursor: 'pointer', 
-                  transition: 'all 0.3s ease',
-                  fontSize: 28,
-                  fontWeight: 'bold'
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.transform = 'scale(1.08)';
-                  e.currentTarget.style.boxShadow = '0 12px 28px rgba(167, 139, 250, 0.4)';
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.transform = 'scale(1)';
-                  e.currentTarget.style.boxShadow = '0 8px 20px rgba(167, 139, 250, 0.3)';
-                }}>
-                ← 
-              </button>
+          <>
+              <div ref={mapContainerNavRef} style={{ position: 'absolute', inset: 0, zIndex: 0, width: '100%', height: '100%' }} />
 
-              <div style={{ pointerEvents: 'auto', backgroundColor: 'rgba(255,255,255,0.9)', backdropFilter: 'blur(12px)', borderRadius: 20, padding: '12px 20px', boxShadow: '0 4px 12px rgba(0,0,0,0.08)', border: '1px solid rgba(255,255,255,0.6)', marginTop: 16, display: 'flex', alignItems: 'center', gap: 20 }}>
-                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-                      <span style={{ fontSize: 9, fontWeight: 'bold', color: '#9ca3af', textTransform: 'uppercase', letterSpacing: 0.5 }}>Distance</span>
-                      <span style={{ fontSize: 18, fontWeight: 'bold', color: '#111827', marginTop: 2 }}>{formatDist(navStats.distanceRem)}</span>
-                  </div>
-                  <div style={{ width: 1, backgroundColor: '#e5e7eb', height: 50 }}></div>
-                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-                      <span style={{ fontSize: 9, fontWeight: 'bold', color: '#9ca3af', textTransform: 'uppercase', letterSpacing: 0.5 }}>Speed</span>
-                      <span style={{ fontSize: 18, fontWeight: 'bold', color: '#16a34a', marginTop: 2 }}>{navStats.speed} km/h</span>
+              <div style={{ position: 'absolute', inset: 0, zIndex: 1000, display: 'flex', flexDirection: 'column', alignItems: 'flex-start', justifyContent: 'flex-start', paddingTop: 24, paddingLeft: 24, pointerEvents: 'none' }}>
+                  <button 
+                    onClick={() => setViewMode('map')} 
+                    style={{ 
+                      pointerEvents: 'auto',
+                      width: 60, 
+                      height: 60, 
+                      borderRadius: '20px', 
+                      backgroundColor: '#a78bfa',
+                      color: 'white', 
+                      border: '3px solid white',
+                      boxShadow: '0 8px 20px rgba(167, 139, 250, 0.3)',
+                      display: 'flex', 
+                      alignItems: 'center', 
+                      justifyContent: 'center',
+                      cursor: 'pointer', 
+                      transition: 'all 0.3s ease',
+                      fontSize: 28,
+                      fontWeight: 'bold'
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.transform = 'scale(1.08)';
+                      e.currentTarget.style.boxShadow = '0 12px 28px rgba(167, 139, 250, 0.4)';
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.transform = 'scale(1)';
+                      e.currentTarget.style.boxShadow = '0 8px 20px rgba(167, 139, 250, 0.3)';
+                    }}>
+                    ← 
+                  </button>
+
+                  <div style={{ pointerEvents: 'auto', backgroundColor: 'rgba(255,255,255,0.9)', backdropFilter: 'blur(12px)', borderRadius: 20, padding: '12px 20px', boxShadow: '0 4px 12px rgba(0,0,0,0.08)', border: '1px solid rgba(255,255,255,0.6)', marginTop: 16, display: 'flex', alignItems: 'center', gap: 20 }}>
+                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                          <span style={{ fontSize: 9, fontWeight: 'bold', color: '#9ca3af', textTransform: 'uppercase', letterSpacing: 0.5 }}>Distance</span>
+                          <span style={{ fontSize: 18, fontWeight: 'bold', color: '#111827', marginTop: 2 }}>{formatDist(navStats.distanceRem)}</span>
+                      </div>
+                      <div style={{ width: 1, backgroundColor: '#e5e7eb', height: 50 }}></div>
+                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                          <span style={{ fontSize: 9, fontWeight: 'bold', color: '#9ca3af', textTransform: 'uppercase', letterSpacing: 0.5 }}>Speed</span>
+                          <span style={{ fontSize: 18, fontWeight: 'bold', color: '#16a34a', marginTop: 2 }}>{navStats.speed} km/h</span>
+                      </div>
                   </div>
               </div>
-          </div>
+          </>
         )}
 
         {viewMode === 'history' && (
