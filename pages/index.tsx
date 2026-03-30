@@ -117,7 +117,6 @@ export default function MapPage() {
   const speak = (text: string) => {
     if (!soundEnabled || typeof window === 'undefined') return;
     
-    // Cancel any ongoing speech
     window.speechSynthesis?.cancel();
     
     const utterance = new SpeechSynthesisUtterance(text);
@@ -137,7 +136,6 @@ export default function MapPage() {
       const now = audioContext.currentTime;
 
       if (type === 'navigation-start') {
-        // Two beeps
         const osc1 = audioContext.createOscillator();
         const gain1 = audioContext.createGain();
         osc1.connect(gain1);
@@ -158,7 +156,6 @@ export default function MapPage() {
         osc2.start(now + 0.25);
         osc2.stop(now + 0.45);
       } else if (type === 'turn-alert') {
-        // Single beep
         const osc = audioContext.createOscillator();
         const gain = audioContext.createGain();
         osc.connect(gain);
@@ -169,7 +166,6 @@ export default function MapPage() {
         osc.start(now);
         osc.stop(now + 0.15);
       } else if (type === 'waypoint') {
-        // Three quick beeps
         for (let i = 0; i < 3; i++) {
           const osc = audioContext.createOscillator();
           const gain = audioContext.createGain();
@@ -182,7 +178,6 @@ export default function MapPage() {
           osc.stop(now + i * 0.1 + 0.08);
         }
       } else if (type === 'destination-reached') {
-        // Success chime
         const osc1 = audioContext.createOscillator();
         const gain1 = audioContext.createGain();
         osc1.connect(gain1);
@@ -301,7 +296,6 @@ export default function MapPage() {
             mapRef.current.setView([latitude, longitude], 18, { animate: true });
             const distRem = destinationRef.current ? getDistanceFromLatLonInM(latitude, longitude, destinationRef.current.lat, destinationRef.current.lng) : 0;
             
-            // Navigation alerts
             if (soundEnabled) {
               if (distRem < 50 && lastAnnounceDistRef.current > 50) {
                 playSound('destination-reached');
@@ -358,7 +352,6 @@ export default function MapPage() {
     else accuracyCircleRef.current = L.circle([loc.lat, loc.lng], { radius: loc.accuracy, color: '#16a34a', fillOpacity: 0.05, weight: 0 }).addTo(mapRef.current);
   };
 
-  // Update main destination marker
   useEffect(() => {
     const L = (window as any).L;
     if (!mapRef.current || !L) return;
@@ -379,7 +372,6 @@ export default function MapPage() {
     }
   }, [mainDestination, mapLoaded]);
 
-  // Update main route (user location to PIN A) - ONLY BLUE THIN LINE
   useEffect(() => {
     const L = (window as any).L;
     if (!mapRef.current || !L) return;
@@ -411,7 +403,6 @@ export default function MapPage() {
     }
   }, [mainDestination, transportMode, mapLoaded]);
 
-  // Fetch segment routes via API
   const fetchSegmentRoute = async (from: { lat: number; lng: number }, to: PinSegment, fromLetter: string, toIndex: number) => {
     const coords = `${from.lng},${from.lat};${to.lng},${to.lat}`;
     const profile = transportModeRef.current === 'walking' ? 'foot' : transportModeRef.current === 'cycling' ? 'bike' : 'car';
@@ -443,7 +434,6 @@ export default function MapPage() {
     }
   };
 
-  // Update pins - calculate routes from main destination (PIN A → B → C, etc.)
   useEffect(() => {
     if (!mainDestination || pinSegments.length === 0) {
       setSegmentRoutes([]);
@@ -460,7 +450,6 @@ export default function MapPage() {
     });
   }, [pinSegments, mainDestination]);
 
-  // Update segment polylines on map - ONLY show segment routes (PIN A→B, B→C, etc.) NOT main route
   useEffect(() => {
     if (!mapRef.current) {
       segmentPolylinesRef.current.forEach(l => l.remove());
@@ -492,7 +481,6 @@ export default function MapPage() {
     }
   }, [segmentRoutes, highlightedSegmentIndex, pinSegments]);
 
-  // Update pin markers on map
   useEffect(() => {
     if (!mapRef.current || !isBuilderMode) return;
     const L = (window as any).L;
@@ -553,7 +541,16 @@ export default function MapPage() {
     const L = (window as any).L;
     routePolylinesRef.current.forEach(l => l.remove());
     routes.forEach((route, i) => {
+        // In navigation mode: only show selected route
+        // In map mode: show selected route bold, others faint
         const isActive = i === selectedRouteIndex;
+        const isNavigating = viewMode === 'navigation';
+        
+        if (isNavigating && !isActive) {
+          // Skip rendering non-selected routes during navigation
+          return;
+        }
+
         const polyline = L.polyline(route.coordinates, { 
           color: isActive ? '#3b82f6' : '#93c5fd', 
           weight: isActive ? 12 : 5, 
@@ -564,7 +561,7 @@ export default function MapPage() {
         if (isActive) { polyline.bringToFront(); }
         routePolylinesRef.current.push(polyline);
     });
-  }, [routes, selectedRouteIndex]);
+  }, [routes, selectedRouteIndex, viewMode]);
 
   const getDistanceFromLatLonInM = (lat1: number, lon1: number, lat2: number, lon2: number) => {
     const R = 6371000; const dLat = (lat2 - lat1) * (Math.PI / 180); const dLon = (lon2 - lon1) * (Math.PI / 180);
@@ -799,14 +796,14 @@ export default function MapPage() {
                                           textAlign: 'left',
                                           boxShadow: selectedRouteIndex === idx ? '0 4px 12px rgba(59, 130, 246, 0.15)' : 'none'
                                         }}>
-                                          <div style={{ display: 'flex', alignItems: 'center', gap: 18 }}>
+                                          <div style={{ display: 'flex', alignItems: 'center', gap: 18, flex: 1 }}>
                                               <div style={{ width: 36, height: 36, backgroundColor: selectedRouteIndex === idx ? '#3b82f6' : '#e5e7eb', color: 'white', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold', fontSize: 16 }}>{idx + 1}</div>
                                               <div style={{ display: 'flex', flexDirection: 'column' }}>
                                                   <span style={{ fontWeight: 'bold', color: '#111827', fontSize: 16 }}>{formatTime(route.summary.totalTime)}</span>
                                                   <span style={{ color: '#9ca3af', fontSize: 12, marginTop: 2 }}>{(route.summary.totalDistance / 1000).toFixed(2)} km</span>
                                               </div>
                                           </div>
-                                          {selectedRouteIndex === idx && <span style={{ fontSize: 20 }}>✓</span>}
+                                          {selectedRouteIndex === idx && <span style={{ fontSize: 24, color: '#3b82f6', fontWeight: 'bold' }}>✓</span>}
                                       </button>
                                   ))}
                               </div>
