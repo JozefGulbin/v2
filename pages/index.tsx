@@ -61,6 +61,7 @@ export default function MapPage() {
   const [recordingStartTime, setRecordingStartTime] = useState<number | null>(null);
   const [mapLoaded, setMapLoaded] = useState(false);
   const [highlightedSegmentIndex, setHighlightedSegmentIndex] = useState<number | null>(null);
+  const [soundEnabled, setSoundEnabled] = useState(true);
 
   const mapRef = useRef<any>(null);
   const mapContainerRef = useRef<HTMLDivElement>(null);
@@ -76,6 +77,7 @@ export default function MapPage() {
   const segmentPolylinesRef = useRef<any[]>([]);
   const mainDestinationMarkerRef = useRef<any>(null);
   const isBuilderModeRef = useRef(false);
+  const lastAnnounceDistRef = useRef<number>(0);
   
   const userLocationRef = useRef<{ lat: number; lng: number, heading: number | null } | null>(null);
   const isNavigatingRef = useRef(false);
@@ -106,7 +108,105 @@ export default function MapPage() {
       if (viewMode !== 'navigation' && mapContainerRef.current) {
           mapContainerRef.current.style.transform = 'translate(-50%, -50%) rotate(0deg)';
       }
+      if (viewMode === 'navigation' && soundEnabled) {
+        playSound('navigation-start');
+      }
   }, [viewMode]);
+
+  // Text-to-speech function
+  const speak = (text: string) => {
+    if (!soundEnabled || typeof window === 'undefined') return;
+    
+    // Cancel any ongoing speech
+    window.speechSynthesis?.cancel();
+    
+    const utterance = new SpeechSynthesisUtterance(text);
+    utterance.rate = 1.0;
+    utterance.pitch = 1.0;
+    utterance.volume = 1.0;
+    
+    window.speechSynthesis?.speak(utterance);
+  };
+
+  // Sound effects using Web Audio API
+  const playSound = (type: 'navigation-start' | 'turn-alert' | 'waypoint' | 'destination-reached') => {
+    if (!soundEnabled || typeof window === 'undefined') return;
+
+    try {
+      const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+      const now = audioContext.currentTime;
+
+      if (type === 'navigation-start') {
+        // Two beeps
+        const osc1 = audioContext.createOscillator();
+        const gain1 = audioContext.createGain();
+        osc1.connect(gain1);
+        gain1.connect(audioContext.destination);
+        osc1.frequency.value = 800;
+        gain1.gain.setValueAtTime(0.3, now);
+        gain1.gain.exponentialRampToValueAtTime(0.01, now + 0.2);
+        osc1.start(now);
+        osc1.stop(now + 0.2);
+
+        const osc2 = audioContext.createOscillator();
+        const gain2 = audioContext.createGain();
+        osc2.connect(gain2);
+        gain2.connect(audioContext.destination);
+        osc2.frequency.value = 1000;
+        gain2.gain.setValueAtTime(0.3, now + 0.25);
+        gain2.gain.exponentialRampToValueAtTime(0.01, now + 0.45);
+        osc2.start(now + 0.25);
+        osc2.stop(now + 0.45);
+      } else if (type === 'turn-alert') {
+        // Single beep
+        const osc = audioContext.createOscillator();
+        const gain = audioContext.createGain();
+        osc.connect(gain);
+        gain.connect(audioContext.destination);
+        osc.frequency.value = 1200;
+        gain.gain.setValueAtTime(0.3, now);
+        gain.gain.exponentialRampToValueAtTime(0.01, now + 0.15);
+        osc.start(now);
+        osc.stop(now + 0.15);
+      } else if (type === 'waypoint') {
+        // Three quick beeps
+        for (let i = 0; i < 3; i++) {
+          const osc = audioContext.createOscillator();
+          const gain = audioContext.createGain();
+          osc.connect(gain);
+          gain.connect(audioContext.destination);
+          osc.frequency.value = 1000;
+          gain.gain.setValueAtTime(0.2, now + i * 0.1);
+          gain.gain.exponentialRampToValueAtTime(0.01, now + i * 0.1 + 0.08);
+          osc.start(now + i * 0.1);
+          osc.stop(now + i * 0.1 + 0.08);
+        }
+      } else if (type === 'destination-reached') {
+        // Success chime
+        const osc1 = audioContext.createOscillator();
+        const gain1 = audioContext.createGain();
+        osc1.connect(gain1);
+        gain1.connect(audioContext.destination);
+        osc1.frequency.value = 1000;
+        gain1.gain.setValueAtTime(0.3, now);
+        gain1.gain.exponentialRampToValueAtTime(0.01, now + 0.3);
+        osc1.start(now);
+        osc1.stop(now + 0.3);
+
+        const osc2 = audioContext.createOscillator();
+        const gain2 = audioContext.createGain();
+        osc2.connect(gain2);
+        gain2.connect(audioContext.destination);
+        osc2.frequency.value = 1500;
+        gain2.gain.setValueAtTime(0.3, now + 0.35);
+        gain2.gain.exponentialRampToValueAtTime(0.01, now + 0.65);
+        osc2.start(now + 0.35);
+        osc2.stop(now + 0.65);
+      }
+    } catch (error) {
+      console.error('Audio error:', error);
+    }
+  };
 
   useEffect(() => {
     if (viewMode !== 'map' || mapLoaded) return;
@@ -137,10 +237,9 @@ export default function MapPage() {
             if (highlightLayerRef.current) highlightLayerRef.current.remove();
             
             if (isBuilderModeRef.current) {
-              // In builder mode: add extra stops (B, C, D, etc.)
               setPinSegments(prev => {
                 const newPin: PinSegment = {
-                  letter: String.fromCharCode(66 + prev.length), // 66 = 'B'
+                  letter: String.fromCharCode(66 + prev.length),
                   lat: e.latlng.lat,
                   lng: e.latlng.lng
                 };
@@ -148,7 +247,6 @@ export default function MapPage() {
               });
             }
             else { 
-              // Not in builder mode: set main destination (PIN A)
               if (!mainDestination) {
                 setMainDestination({ lat: e.latlng.lat, lng: e.latlng.lng });
                 setNotification({ type: 'info', msg: 'Main destination set! Click PIN+ to add stops.' });
@@ -202,6 +300,24 @@ export default function MapPage() {
             }
             mapRef.current.setView([latitude, longitude], 18, { animate: true });
             const distRem = destinationRef.current ? getDistanceFromLatLonInM(latitude, longitude, destinationRef.current.lat, destinationRef.current.lng) : 0;
+            
+            // Navigation alerts
+            if (soundEnabled) {
+              if (distRem < 50 && lastAnnounceDistRef.current > 50) {
+                playSound('destination-reached');
+                speak('You have arrived at your destination');
+                lastAnnounceDistRef.current = distRem;
+              } else if (distRem < 200 && lastAnnounceDistRef.current > 200) {
+                playSound('waypoint');
+                speak(`${Math.round(distRem)} meters to destination`);
+                lastAnnounceDistRef.current = distRem;
+              } else if (distRem < 500 && lastAnnounceDistRef.current > 500) {
+                playSound('turn-alert');
+                speak(`${Math.round(distRem)} meters remaining`);
+                lastAnnounceDistRef.current = distRem;
+              }
+            }
+
             setNavStats({ speed: speed ? Math.round(speed * 3.6) : 0, distanceRem: distRem, timeRem: speed && speed > 0 ? distRem / speed : distRem / 1.4, pace: calculatePace(speed), calories: Math.round((totalRecordedDist / 1000) * 65) });
         }
     };
@@ -354,16 +470,13 @@ export default function MapPage() {
 
     const L = (window as any).L;
     
-    // Remove all segment polylines first
     segmentPolylinesRef.current.forEach(l => l.remove());
     segmentPolylinesRef.current = [];
 
-    // Only render segment routes if we have pins
     if (segmentRoutes.length > 0 && pinSegments.length > 0) {
       segmentRoutes.forEach((segment, idx) => {
         if (!segment || !segment.coordinates || segment.coordinates.length === 0) return;
         
-        // Use different colors for segments, NOT blue
         const colors = ['#ff6b6b', '#4ecdc4', '#45b7d1', '#f9ca24', '#6c5ce7', '#a8e6cf'];
         const color = colors[idx % colors.length];
         const isHighlighted = idx === highlightedSegmentIndex;
@@ -551,6 +664,26 @@ export default function MapPage() {
                   </div>
               </div>
 
+              <div style={{ position: 'absolute', top: 32, right: 32, zIndex: 1000, display: 'flex', gap: 12 }}>
+                  <button 
+                    onClick={() => setSoundEnabled(!soundEnabled)}
+                    style={{ 
+                      width: 48, 
+                      height: 48, 
+                      borderRadius: 9999, 
+                      display: 'flex', 
+                      alignItems: 'center', 
+                      justifyContent: 'center', 
+                      fontSize: 24, 
+                      backgroundColor: soundEnabled ? '#16a34a' : '#f3f4f6', 
+                      border: 'none', 
+                      cursor: 'pointer',
+                      transition: 'all 0.3s'
+                    }}>
+                    {soundEnabled ? '🔊' : '🔇'}
+                  </button>
+              </div>
+
               <div style={{ position: 'absolute', top: 128, right: 32, zIndex: 1000, display: 'flex', flexDirection: 'column', gap: 24 }}>
                   <button onClick={toggleRecording} style={{ width: 64, height: 64, borderRadius: 32, boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', transition: 'all 0.3s', border: `4px solid ${isRecording ? '#fca5a5' : 'white'}`, backgroundColor: isRecording ? '#dc2626' : 'white', color: isRecording ? 'white' : '#dc2626', cursor: 'pointer' }}>
                      <div style={{ width: 16, height: 16, borderRadius: '50%', backgroundColor: isRecording ? 'white' : '#dc2626', animation: isRecording ? 'pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite' : 'none' }}></div>
@@ -689,7 +822,7 @@ export default function MapPage() {
                           </div>
                           <div style={{ display: 'flex', gap: 12 }}>
                               <button onClick={() => { setMainDestination(null); setPinSegments([]); setRoutes([]); setShowRouteSelector(false); setHighlightedSegmentIndex(null); }} style={{ width: 52, height: 52, borderRadius: '50%', backgroundColor: '#f3f4f6', color: '#d1d5db', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16, border: 'none', cursor: 'pointer', transition: 'all 0.2s' }}>✕</button>
-                              <button onClick={() => { setViewMode('navigation'); destinationRef.current = mainDestination; }} style={{ height: 52, paddingLeft: 36, paddingRight: 36, backgroundColor: '#3b82f6', color: 'white', borderRadius: '50%', fontWeight: 'bold', fontSize: 16, boxShadow: '0 10px 15px -3px rgba(59, 130, 246, 0.3)', cursor: 'pointer', border: 'none', transition: 'all 0.3s', whiteSpace: 'nowrap' }}>GO</button>
+                              <button onClick={() => { setViewMode('navigation'); destinationRef.current = mainDestination; lastAnnounceDistRef.current = 0; }} style={{ height: 52, paddingLeft: 36, paddingRight: 36, backgroundColor: '#3b82f6', color: 'white', borderRadius: '50%', fontWeight: 'bold', fontSize: 16, boxShadow: '0 10px 15px -3px rgba(59, 130, 246, 0.3)', cursor: 'pointer', border: 'none', transition: 'all 0.3s', whiteSpace: 'nowrap' }}>GO</button>
                           </div>
                       </div>
                   </div>
