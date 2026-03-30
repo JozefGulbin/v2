@@ -2,7 +2,6 @@ import React, { useState, useEffect, useRef } from "react";
 import Head from 'next/head';
 import LostView from "@/components/LostView";
 import ElderlyKidFriendlyNav from "@/components/ElderlyKidFriendlyNav";
-import SpringLandingPage from "@/components/SpringLandingPage";
 
 type ViewMode = 'landing' | 'map' | 'lost' | 'navigation' | 'history';
 type TransportMode = 'walking' | 'cycling' | 'driving';
@@ -113,7 +112,6 @@ export default function MapPage() {
       }
   }, [viewMode]);
 
-  // Text-to-speech function
   const speak = (text: string) => {
     if (!soundEnabled || typeof window === 'undefined') return;
     
@@ -127,7 +125,6 @@ export default function MapPage() {
     window.speechSynthesis?.speak(utterance);
   };
 
-  // Sound effects using Web Audio API
   const playSound = (type: 'navigation-start' | 'turn-alert' | 'waypoint' | 'destination-reached') => {
     if (!soundEnabled || typeof window === 'undefined') return;
 
@@ -381,7 +378,8 @@ export default function MapPage() {
       mainRoutePolylineRef.current = null;
     }
 
-    if (mainDestination && userLocationRef.current) {
+    // Only show main route in navigation mode
+    if (mainDestination && userLocationRef.current && viewMode === 'navigation') {
       const coords = `${userLocationRef.current.lng},${userLocationRef.current.lat};${mainDestination.lng},${mainDestination.lat}`;
       const profile = transportModeRef.current === 'walking' ? 'foot' : transportModeRef.current === 'cycling' ? 'bike' : 'car';
       
@@ -401,7 +399,7 @@ export default function MapPage() {
         })
         .catch(err => console.error('Main route fetch error:', err));
     }
-  }, [mainDestination, transportMode, mapLoaded]);
+  }, [mainDestination, transportMode, mapLoaded, viewMode]);
 
   const fetchSegmentRoute = async (from: { lat: number; lng: number }, to: PinSegment, fromLetter: string, toIndex: number) => {
     const coords = `${from.lng},${from.lat};${to.lng},${to.lat}`;
@@ -541,13 +539,11 @@ export default function MapPage() {
     const L = (window as any).L;
     routePolylinesRef.current.forEach(l => l.remove());
     routes.forEach((route, i) => {
-        // In navigation mode: only show selected route
-        // In map mode: show selected route bold, others faint
         const isActive = i === selectedRouteIndex;
         const isNavigating = viewMode === 'navigation';
         
+        // Only show selected route during navigation
         if (isNavigating && !isActive) {
-          // Skip rendering non-selected routes during navigation
           return;
         }
 
@@ -626,29 +622,147 @@ export default function MapPage() {
           @keyframes flowerpetal { 0% { transform: translateY(-10vh) translateX(0) rotate(0deg); } 100% { transform: translateY(110vh) translateX(20px) rotate(360deg); } }
           @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
           @keyframes bounce { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-15px); } }
+          @keyframes float { 0%, 100% { transform: translateY(0px); } 50% { transform: translateY(-20px); } }
           .flower-petal { position: absolute; color: #ffb6c1; user-select: none; z-index: 9999; pointer-events: none; font-size: 1.8rem; animation: flowerpetal 12s linear infinite; opacity: 0.8; }
           .no-scrollbar::-webkit-scrollbar { display: none; }
+          .forest-tree { position: absolute; user-select: none; pointer-events: none; }
+          .forest-animal { position: absolute; user-select: none; pointer-events: none; animation: float 4s ease-in-out infinite; }
         `}</style>
       </Head>
 
       <div style={{ width: '100vw', height: '100vh', margin: 0, padding: 0, overflow: 'hidden', backgroundColor: '#f0fdf4', fontFamily: 'Arial, sans-serif', position: 'fixed', top: 0, left: 0 }}>
 
-        {viewMode === 'landing' && [...Array(25)].map((_, i) => (
-          <div key={i} className="flower-petal" style={{ left: `${Math.random() * 100}%`, animationDelay: `${Math.random() * 12}s`, animationDuration: `${10 + Math.random() * 8}s` }}>🌸</div>
-        ))}
-
-        <div ref={mapContainerRef} style={{ position: 'absolute', top: '50%', left: '50%', zIndex: 0, width: '400vw', height: '400vh', transform: 'translate(-50%, -50%) rotate(0deg)', transformOrigin: 'center center', willChange: 'transform' }} />
-
         {viewMode === 'landing' && (
-          <SpringLandingPage 
-            onEikime={() => { setViewMode('map'); }} 
-            onMarsrutai={() => setViewMode('history')} 
-            onSos={() => setViewMode('lost')} 
-          />
+          <>
+            {/* Forest Background */}
+            <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(180deg, #87ceeb 0%, #98fb98 40%, #228b22 100%)', zIndex: 0 }}>
+              {/* Sky gradient */}
+            </div>
+
+            {/* Background Trees */}
+            <div style={{ position: 'absolute', bottom: 0, left: '5%', width: '90px', height: '200px', zIndex: 1 }}>
+              <div style={{ width: '100%', height: '100%', background: 'linear-gradient(180deg, transparent 0%, #1b4d1b 100%)', clipPath: 'polygon(50% 0%, 100% 38%, 82% 38%, 100% 55%, 80% 55%, 100% 72%, 75% 72%, 100% 90%, 50% 100%, 0% 90%, 25% 72%, 0% 72%, 20% 55%, 0% 55%, 18% 38%, 0% 38%)', opacity: 0.6 }} />
+            </div>
+            <div style={{ position: 'absolute', bottom: 0, right: '8%', width: '110px', height: '220px', zIndex: 1 }}>
+              <div style={{ width: '100%', height: '100%', background: 'linear-gradient(180deg, transparent 0%, #0d3d0d 100%)', clipPath: 'polygon(50% 0%, 100% 35%, 85% 35%, 100% 50%, 82% 50%, 100% 68%, 78% 68%, 100% 85%, 50% 100%, 0% 85%, 22% 68%, 0% 68%, 18% 50%, 0% 50%, 15% 35%, 0% 35%)', opacity: 0.7 }} />
+            </div>
+
+            {/* Lake */}
+            <div style={{ position: 'absolute', bottom: '15%', left: '15%', width: '200px', height: '120px', background: 'radial-gradient(ellipse at 40% 30%, rgba(100, 200, 255, 0.6), rgba(30, 120, 200, 0.8))', borderRadius: '50%', zIndex: 2, filter: 'blur(2px)' }} />
+
+            {/* Animals */}
+            <div className="forest-animal" style={{ bottom: '35%', left: '20%', fontSize: '60px', zIndex: 3, animationDelay: '0s' }}>🦌</div>
+            <div className="forest-animal" style={{ bottom: '28%', right: '18%', fontSize: '50px', zIndex: 3, animationDelay: '1s' }}>🦉</div>
+            <div className="forest-animal" style={{ bottom: '40%', left: '60%', fontSize: '45px', zIndex: 3, animationDelay: '2s' }}>🦊</div>
+
+            {/* Center Buttons */}
+            <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 40, zIndex: 10 }}>
+              {/* Title */}
+              <div style={{ marginBottom: 20, textAlign: 'center' }}>
+                <h1 style={{ fontSize: 56, fontWeight: 'bold', color: '#0f5f0f', textShadow: '2px 2px 4px rgba(0,0,0,0.2)' }}>TapuTapu</h1>
+                <p style={{ fontSize: 16, color: '#1b4d1b', marginTop: 8, fontStyle: 'italic' }}>Navigate with nature</p>
+              </div>
+
+              {/* Button 1 - Eikime */}
+              <button 
+                onClick={() => setViewMode('map')}
+                style={{ 
+                  width: 280, 
+                  height: 70, 
+                  borderRadius: 20, 
+                  backgroundColor: '#10b981', 
+                  color: 'white', 
+                  fontSize: 28, 
+                  fontWeight: 'bold',
+                  border: '4px solid white',
+                  cursor: 'pointer',
+                  transition: 'all 0.3s ease',
+                  boxShadow: '0 10px 30px rgba(16, 185, 129, 0.4)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: 12
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.transform = 'scale(1.08)';
+                  e.currentTarget.style.boxShadow = '0 15px 40px rgba(16, 185, 129, 0.6)';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.transform = 'scale(1)';
+                  e.currentTarget.style.boxShadow = '0 10px 30px rgba(16, 185, 129, 0.4)';
+                }}>
+                🗺️ Eikime!
+              </button>
+
+              {/* Button 2 - jau buvau */}
+              <button 
+                onClick={() => setViewMode('history')}
+                style={{ 
+                  width: 280, 
+                  height: 70, 
+                  borderRadius: 20, 
+                  backgroundColor: '#3b82f6', 
+                  color: 'white', 
+                  fontSize: 28, 
+                  fontWeight: 'bold',
+                  border: '4px solid white',
+                  cursor: 'pointer',
+                  transition: 'all 0.3s ease',
+                  boxShadow: '0 10px 30px rgba(59, 130, 246, 0.4)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: 12
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.transform = 'scale(1.08)';
+                  e.currentTarget.style.boxShadow = '0 15px 40px rgba(59, 130, 246, 0.6)';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.transform = 'scale(1)';
+                  e.currentTarget.style.boxShadow = '0 10px 30px rgba(59, 130, 246, 0.4)';
+                }}>
+                📚 Jau buvau!
+              </button>
+
+              {/* Button 3 - SOS */}
+              <button 
+                onClick={() => setViewMode('lost')}
+                style={{ 
+                  width: 280, 
+                  height: 70, 
+                  borderRadius: 20, 
+                  backgroundColor: '#dc2626', 
+                  color: 'white', 
+                  fontSize: 28, 
+                  fontWeight: 'bold',
+                  border: '4px solid white',
+                  cursor: 'pointer',
+                  transition: 'all 0.3s ease',
+                  boxShadow: '0 10px 30px rgba(220, 38, 38, 0.4)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: 12
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.transform = 'scale(1.08)';
+                  e.currentTarget.style.boxShadow = '0 15px 40px rgba(220, 38, 38, 0.6)';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.transform = 'scale(1)';
+                  e.currentTarget.style.boxShadow = '0 10px 30px rgba(220, 38, 38, 0.4)';
+                }}>
+                🆘 SOS
+              </button>
+            </div>
+          </>
         )}
 
         {viewMode === 'map' && (
           <>
+              <div ref={mapContainerRef} style={{ position: 'absolute', top: '50%', left: '50%', zIndex: 0, width: '400vw', height: '400vh', transform: 'translate(-50%, -50%) rotate(0deg)', transformOrigin: 'center center', willChange: 'transform' }} />
+
               <div style={{ position: 'absolute', top: 32, left: 0, right: 0, zIndex: 1000, display: 'flex', justifyContent: 'center', pointerEvents: 'none', paddingLeft: 24, paddingRight: 24 }}>
                   <div style={{ pointerEvents: 'auto', backgroundColor: 'rgba(255,255,255,0.95)', backdropFilter: 'blur(12px)', boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1)', borderRadius: 9999, padding: 10, display: 'flex', alignItems: 'center', border: '1px solid rgba(255,255,255,0.5)' }}>
                      <button onClick={() => setViewMode('landing')} style={{ width: 48, height: 48, borderRadius: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 24, backgroundColor: '#f3f4f6', border: 'none', cursor: 'pointer' }}>🏠</button>
