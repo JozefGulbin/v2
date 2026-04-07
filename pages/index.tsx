@@ -389,6 +389,7 @@ export default function MapPage() {
       mainRoutePolylineRef.current = null;
     }
 
+    // ONLY show main route during navigation mode
     if (mainDestination && userLocationRef.current && viewMode === 'navigation') {
       const coords = `${userLocationRef.current.lng},${userLocationRef.current.lat};${mainDestination.lng},${mainDestination.lat}`;
       const profile = transportModeRef.current === 'walking' ? 'foot' : transportModeRef.current === 'cycling' ? 'bike' : 'car';
@@ -943,88 +944,4 @@ export default function MapPage() {
           <>
               <div ref={mapContainerNavRef} style={{ position: 'absolute', inset: 0, zIndex: 0, width: '100%', height: '100%' }} />
 
-              <div style={{ position: 'absolute', inset: 0, zIndex: 1000, display: 'flex', flexDirection: 'column', alignItems: 'flex-start', justifyContent: 'flex-start', paddingTop: 24, paddingLeft: 24, pointerEvents: 'none' }}>
-                  <button 
-                    onClick={() => setViewMode('map')} 
-                    style={{ 
-                      pointerEvents: 'auto',
-                      width: 60, 
-                      height: 60, 
-                      borderRadius: '20px', 
-                      backgroundColor: '#a78bfa',
-                      color: 'white', 
-                      border: '3px solid white',
-                      boxShadow: '0 8px 20px rgba(167, 139, 250, 0.3)',
-                      display: 'flex', 
-                      alignItems: 'center', 
-                      justifyContent: 'center',
-                      cursor: 'pointer', 
-                      transition: 'all 0.3s ease',
-                      fontSize: 28,
-                      fontWeight: 'bold'
-                    }}
-                    onMouseEnter={(e) => {
-                      e.currentTarget.style.transform = 'scale(1.08)';
-                      e.currentTarget.style.boxShadow = '0 12px 28px rgba(167, 139, 250, 0.4)';
-                    }}
-                    onMouseLeave={(e) => {
-                      e.currentTarget.style.transform = 'scale(1)';
-                      e.currentTarget.style.boxShadow = '0 8px 20px rgba(167, 139, 250, 0.3)';
-                    }}>
-                    ← 
-                  </button>
-
-                  <div style={{ pointerEvents: 'auto', backgroundColor: 'rgba(255,255,255,0.9)', backdropFilter: 'blur(12px)', borderRadius: 20, padding: '12px 20px', boxShadow: '0 4px 12px rgba(0,0,0,0.08)', border: '1px solid rgba(255,255,255,0.6)', marginTop: 16, display: 'flex', alignItems: 'center', gap: 20 }}>
-                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-                          <span style={{ fontSize: 9, fontWeight: 'bold', color: '#9ca3af', textTransform: 'uppercase', letterSpacing: 0.5 }}>Distance</span>
-                          <span style={{ fontSize: 18, fontWeight: 'bold', color: '#111827', marginTop: 2 }}>{formatDist(navStats.distanceRem)}</span>
-                      </div>
-                      <div style={{ width: 1, backgroundColor: '#e5e7eb', height: 50 }}></div>
-                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-                          <span style={{ fontSize: 9, fontWeight: 'bold', color: '#9ca3af', textTransform: 'uppercase', letterSpacing: 0.5 }}>Speed</span>
-                          <span style={{ fontSize: 18, fontWeight: 'bold', color: '#16a34a', marginTop: 2 }}>{navStats.speed} km/h</span>
-                      </div>
-                  </div>
-              </div>
-          </>
-        )}
-
-        {viewMode === 'history' && (
-            <div style={{ position: 'absolute', inset: 0, zIndex: 5000, backgroundColor: '#f8fafc', padding: 40, overflow: 'auto' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 24, marginBottom: 48 }}>
-                    <button onClick={() => setViewMode('landing')} style={{ width: 64, height: 64, backgroundColor: 'white', borderRadius: '50%', boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 32, border: 'none', cursor: 'pointer' }}>←</button>
-                    <h1 style={{ fontSize: 32, fontWeight: 'bold', color: '#111827', letterSpacing: -1 }}>My Trails</h1>
-                </div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 24, paddingBottom: 96 }}>
-                    {savedRoutes.map((route) => (
-                        <div key={route.id} style={{ backgroundColor: 'white', padding: 32, borderRadius: 56, boxShadow: '0 1px 3px 0 rgba(0, 0, 0, 0.1)', border: '2px solid transparent', transition: 'all 0.3s', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                            <div onClick={() => loadSavedRoute(route)} style={{ display: 'flex', flexDirection: 'column', flex: 1, cursor: 'pointer' }}>
-                                <span style={{ fontWeight: 'bold', fontSize: 20, color: '#111827' }}>{route.date}</span>
-                                <span style={{ color: '#16a34a', fontSize: 12, fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: 1, marginTop: 4 }}>{(route.distance/1000).toFixed(2)} km • {route.pace} min/km</span>
-                            </div>
-                            <div style={{ display: 'flex', gap: 16 }}>
-                                <button onClick={() => { const gpx = `<?xml version="1.0" encoding="UTF-8"?><gpx version="1.1" creator="TapuTapu"><trk><trkseg>${route.path.map(pt => `<trkpt lat="${pt.lat}" lon="${pt.lng}"></trkpt>`).join('')}</trkseg></trk></gpx>`; const blob = new Blob([gpx], { type: 'application/gpx+xml' }); const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href = url; a.download = `trail-${route.id}.gpx`; a.click(); setNotification({ type: 'info', msg: 'GPX saved!' }); }} style={{ width: 56, height: 56, backgroundColor: '#ecfdf5', color: '#10b981', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20, cursor: 'pointer', border: 'none' }}>💾</button>
-                                <button onClick={() => { if(confirm('Delete?')) { const u = savedRoutes.filter(r => r.id !== route.id); setSavedRoutes(u); localStorage.setItem('taputapu_saved_routes', JSON.stringify(u)); } }} style={{ width: 56, height: 56, backgroundColor: '#fef2f2', color: '#dc2626', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20, cursor: 'pointer', border: 'none' }}>🗑</button>
-                            </div>
-                        </div>
-                    ))}
-                    {savedRoutes.length === 0 && <div style={{ textAlign: 'center', paddingTop: 160, color: '#d1d5db', fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: 1, opacity: 0.4, fontStyle: 'italic' }}>No trails yet...</div>}
-                </div>
-            </div>
-        )}
-
-        {viewMode === 'lost' && (
-          <div style={{ position: 'absolute', inset: 0, zIndex: 7000 }}>
-              <LostView lat={userLocation?.lat || 0} lng={userLocation?.lng || 0} onClose={() => setViewMode('landing')} />
-          </div>
-        )}
-
-        {notification && (
-          <div style={{ position: 'absolute', top: 32, right: 120, zIndex: 8000, backgroundColor: '#1f2937', color: 'white', paddingLeft: 28, paddingRight: 28, paddingTop: 14, paddingBottom: 14, borderRadius: 9999, boxShadow: '0 10px 25px -5px rgba(0,0,0,0.2)', fontSize: 14, fontWeight: 'bold', whiteSpace: 'nowrap', border: '2px solid rgba(255,255,255,0.15)', backdropFilter: 'blur(12px)' }}>
-              {notification.msg}
-          </div>
-        )}
-      </div>
-    </>
-  );
-}
+              <div style={{ position: 'absolute', inset: 0, zIndex: 1000, display: 'flex', flexDirection: 
