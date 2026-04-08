@@ -8,7 +8,7 @@ type TransportMode = 'walking' | 'cycling' | 'driving';
 type Language = 'en' | 'lt';
 
 interface SavedRoute {
-  id: string;
+  id: string;A
   date: string;
   distance: number;
   duration: number;
@@ -126,7 +126,6 @@ export default function MapPage() {
   const [recordedPath, setRecordedPath] = useState<{lat: number, lng: number}[]>([]);
   const [totalRecordedDist, setTotalRecordedDist] = useState(0);
   const [recordingStartTime, setRecordingStartTime] = useState<number | null>(null);
-  const [mapLoaded, setMapLoaded] = useState(false);
   const [highlightedSegmentIndex, setHighlightedSegmentIndex] = useState<number | null>(null);
   const [soundEnabled, setSoundEnabled] = useState(true);
   const [language, setLanguage] = useState<Language>('en');
@@ -136,6 +135,7 @@ export default function MapPage() {
   const mapRef = useRef<any>(null);
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapContainerNavRef = useRef<HTMLDivElement>(null);
+  const mapInitializedRef = useRef(false);
   const routingControlRef = useRef<any>(null);
   const routePolylinesRef = useRef<any[]>([]);
   const mainRoutePolylineRef = useRef<any>(null);
@@ -326,27 +326,37 @@ export default function MapPage() {
     }
   };
 
+  // Initialize map ONCE, when component mounts
   useEffect(() => {
-    if (!mapLoaded) return;
-    const initMap = async () => {
-      if (typeof window === 'undefined') return;
+    if (typeof window === 'undefined' || mapInitializedRef.current) return;
+    
+    const initializeMap = async () => {
       if (!(window as any).L) {
-        setTimeout(initMap, 100);
-        return;
-      }
-      const L = (window as any).L;
-      
-      const container = viewMode === 'navigation' ? mapContainerNavRef.current : mapContainerRef.current;
-      if (!container) return;
-      
-      if (mapRef.current) {
-        setTimeout(() => mapRef.current.invalidateSize(), 100);
+        setTimeout(initializeMap, 100);
         return;
       }
 
+      const L = (window as any).L;
+      
+      // Create a hidden container for the map
+      const tempContainer = document.createElement('div');
+      tempContainer.style.display = 'none';
+      tempContainer.style.position = 'absolute';
+      tempContainer.style.width = '100%';
+      tempContainer.style.height = '100%';
+      document.body.appendChild(tempContainer);
+
       try {
-        const map = L.map(container, { zoomControl: false, attributionControl: false, preferCanvas: true }).setView([54.6872, 25.2797], 15);
-        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 }).addTo(map);
+        const map = L.map(tempContainer, { 
+          zoomControl: false, 
+          attributionControl: false, 
+          preferCanvas: true 
+        }).setView([54.6872, 25.2797], 15);
+        
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { 
+          maxZoom: 19 
+        }).addTo(map);
+        
         const handleMapClick = (e: any) => {
             if (isNavigatingRef.current) return;
             if (highlightLayerRef.current) highlightLayerRef.current.remove();
@@ -366,21 +376,37 @@ export default function MapPage() {
               }
             }
         };
+        
         map.on('click', handleMapClick);
         mapRef.current = map;
+        mapInitializedRef.current = true;
         startGpsTracking();
         map.locate({ setView: true, maxZoom: 15, enableHighAccuracy: true });
       } catch (error) {
-        console.error('Map error:', error);
+        console.error('Map initialization error:', error);
         setNotification({ type: 'error', msg: t.mapFailedToLoad });
       }
     };
-    setTimeout(initMap, 300);
-  }, [mapLoaded, viewMode]);
 
+    initializeMap();
+  }, []);
+
+  // Mount/unmount map to the active container
   useEffect(() => {
-    if (viewMode === 'map' || viewMode === 'navigation') {
-      if (!mapLoaded) setMapLoaded(true);
+    if (!mapRef.current || !mapInitializedRef.current) return;
+
+    const activeContainer = viewMode === 'navigation' ? mapContainerNavRef.current : mapContainerRef.current;
+    if (!activeContainer) return;
+
+    try {
+      const mapContainer = mapRef.current.getContainer();
+      if (mapContainer.parentNode) {
+        mapContainer.parentNode.removeChild(mapContainer);
+      }
+      activeContainer.appendChild(mapContainer);
+      mapRef.current.invalidateSize();
+    } catch (error) {
+      console.error('Error mounting map:', error);
     }
   }, [viewMode]);
 
@@ -756,7 +782,7 @@ export default function MapPage() {
 
         {viewMode === 'map' && (
           <>
-              <div ref={mapContainerRef} style={{ position: 'absolute', top: '50%', left: '50%', zIndex: 0, width: '400vw', height: '400vh', transform: 'translate(-50%, -50%) rotate(0deg)', transformOrigin: 'center center', willChange: 'transform' }} />
+              <div ref={mapContainerRef} style={{ position: 'absolute', inset: 0, zIndex: 0, width: '100%', height: '100%' }} />
               <div style={{ position: 'absolute', top: 32, left: 0, right: 0, zIndex: 1000, display: 'flex', justifyContent: 'center', pointerEvents: 'none', paddingLeft: 24, paddingRight: 24 }}>
                   <div style={{ pointerEvents: 'auto', backgroundColor: 'rgba(255,255,255,0.95)', backdropFilter: 'blur(12px)', boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1)', borderRadius: 9999, padding: 10, display: 'flex', alignItems: 'center', border: '1px solid rgba(255,255,255,0.5)' }}>
                      <button onClick={() => setViewMode('landing')} style={{ width: 48, height: 48, borderRadius: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 24, backgroundColor: '#f3f4f6', border: 'none', cursor: 'pointer' }}>🏠</button>
