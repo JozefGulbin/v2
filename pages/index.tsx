@@ -734,6 +734,8 @@ export default function MapPage() {
           .flower-petal { position: absolute; color: #ffb6c1; user-select: none; z-index: 9999; pointer-events: none; font-size: 1.8rem; animation: flowerpetal 12s linear infinite; opacity: 0.8; }
           .no-scrollbar::-webkit-scrollbar { display: none; }
           .forest-animal { position: absolute; user-select: none; pointer-events: none; animation: float 4s ease-in-out infinite; }
+          .map-ui-container { pointer-events: none; position: absolute; inset: 0; z-index: 5000; }
+          .map-ui-container > * { pointer-events: auto; }
         `}</style>
       </Head>
 
@@ -769,9 +771,9 @@ export default function MapPage() {
         )}
 
         {viewMode === 'map' && (
-          <>
-              <div style={{ position: 'absolute', top: 32, left: 0, right: 0, zIndex: 1000, display: 'flex', justifyContent: 'center', pointerEvents: 'none', paddingLeft: 24, paddingRight: 24 }}>
-                  <div style={{ pointerEvents: 'auto', backgroundColor: 'rgba(255,255,255,0.95)', backdropFilter: 'blur(12px)', boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1)', borderRadius: 9999, padding: 10, display: 'flex', alignItems: 'center', border: '1px solid rgba(255,255,255,0.5)' }}>
+          <div className="map-ui-container">
+              <div style={{ position: 'absolute', top: 32, left: 0, right: 0, zIndex: 1000, display: 'flex', justifyContent: 'center', paddingLeft: 24, paddingRight: 24 }}>
+                  <div style={{ backgroundColor: 'rgba(255,255,255,0.95)', backdropFilter: 'blur(12px)', boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1)', borderRadius: 9999, padding: 10, display: 'flex', alignItems: 'center', border: '1px solid rgba(255,255,255,0.5)' }}>
                      <button onClick={() => setViewMode('landing')} style={{ width: 48, height: 48, borderRadius: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 24, backgroundColor: '#f3f4f6', border: 'none', cursor: 'pointer' }}>🏠</button>
                      <div style={{ width: 1, backgroundColor: '#e5e7eb', height: 32, margin: '0 20px' }} />
                      <div style={{ display: 'flex', gap: 12 }}>
@@ -811,7 +813,7 @@ export default function MapPage() {
                   </button>
               </div>
               {isBuilderMode && (
-                  <div style={{ position: 'absolute', bottom: 40, left: 32, zIndex: 1000, pointerEvents: 'auto', backgroundColor: 'rgba(255,255,255,0.97)', backdropFilter: 'blur(12px)', borderRadius: 40, padding: 20, boxShadow: '0 10px 30px rgba(0,0,0,0.15)', border: '2px solid white', maxWidth: 320 }}>
+                  <div style={{ position: 'absolute', bottom: 40, left: 32, zIndex: 1000, backgroundColor: 'rgba(255,255,255,0.97)', backdropFilter: 'blur(12px)', borderRadius: 40, padding: 20, boxShadow: '0 10px 30px rgba(0,0,0,0.15)', border: '2px solid white', maxWidth: 320 }}>
                       <h4 style={{ color: '#111827', fontWeight: 'bold', marginBottom: 16, fontSize: 14 }}>📍 {t.pitstops}</h4>
                       <div style={{ display: 'flex', flexDirection: 'column', gap: 12, maxHeight: 300, overflowY: 'auto' }}>
                           <div onClick={() => { setViewMode('navigation'); destinationRef.current = mainDestination; }} style={{ backgroundColor: '#f3f4f6', padding: 12, borderRadius: 12, display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer', transition: 'all 0.2s', border: '2px solid #3b82f6' }}>
@@ -837,9 +839,9 @@ export default function MapPage() {
                   </div>
               )}
               {mainDestination && routes.length > 0 && !isBuilderMode && (
-                  <div style={{ position: 'absolute', bottom: 40, right: 32, zIndex: 1000, width: '100%', maxWidth: 420, pointerEvents: 'none', display: 'flex', flexDirection: 'column', gap: 16, alignItems: 'flex-end' }}>
+                  <div style={{ position: 'absolute', bottom: 40, right: 32, zIndex: 1000, width: '100%', maxWidth: 420, display: 'flex', flexDirection: 'column', gap: 16, alignItems: 'flex-end' }}>
                       {showRouteSelector && (
-                          <div style={{ pointerEvents: 'auto', backgroundColor: 'rgba(255,255,255,0.97)', backdropFilter: 'blur(12px)', borderRadius: 56, padding: 28, boxShadow: '0 25px 40px -5px rgba(0,0,0,0.15)', maxHeight: '55vh', overflow: 'auto', border: '2px solid white', width: '100%' }}>
+                          <div style={{ backgroundColor: 'rgba(255,255,255,0.97)', backdropFilter: 'blur(12px)', borderRadius: 56, padding: 28, boxShadow: '0 25px 40px -5px rgba(0,0,0,0.15)', maxHeight: '55vh', overflow: 'auto', border: '2px solid white', width: '100%' }}>
                               <h3 style={{ fontWeight: 'bold', fontSize: 14, textTransform: 'uppercase', letterSpacing: 1.5, color: '#3b82f6', marginBottom: 20, display: 'flex', alignItems: 'center', gap: 8 }}>🔀 {t.chooseRoute}</h3>
                               <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
                                   {routes.map((route, idx) => (
@@ -857,7 +859,7 @@ export default function MapPage() {
                               </div>
                           </div>
                       )}
-                      <div style={{ pointerEvents: 'auto', backgroundColor: 'rgba(255,255,255,0.97)', backdropFilter: 'blur(12px)', borderRadius: 56, padding: 18, boxShadow: '0 25px 40px -5px rgba(0,0,0,0.15)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', border: '2px solid white', width: '100%' }}>
+                      <div style={{ backgroundColor: 'rgba(255,255,255,0.97)', backdropFilter: 'blur(12px)', borderRadius: 56, padding: 18, boxShadow: '0 25px 40px -5px rgba(0,0,0,0.15)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', border: '2px solid white', width: '100%' }}>
                           <div onClick={() => setShowRouteSelector(!showRouteSelector)} style={{ flex: 1, display: 'flex', flexDirection: 'column', paddingLeft: 24, cursor: 'pointer' }}>
                               <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                                   <span style={{ fontSize: 28, fontWeight: 'bold', color: '#111827' }}>{formatTime(routes[selectedRouteIndex]?.summary.totalTime || 0)}</span>
@@ -872,15 +874,15 @@ export default function MapPage() {
                       </div>
                   </div>
               )}
-          </>
+          </div>
         )}
 
         {viewMode === 'navigation' && (
-          <>
-              <div style={{ position: 'absolute', inset: 0, zIndex: 1000, display: 'flex', flexDirection: 'column', alignItems: 'flex-start', justifyContent: 'flex-start', paddingTop: 24, paddingLeft: 24, pointerEvents: 'none' }}>
-                  <button onClick={() => setViewMode('map')} style={{ pointerEvents: 'auto', width: 60, height: 60, borderRadius: '20px', backgroundColor: '#a78bfa', color: 'white', border: '3px solid white', boxShadow: '0 8px 20px rgba(167, 139, 250, 0.3)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', transition: 'all 0.3s ease', fontSize: 28, fontWeight: 'bold' }} onMouseEnter={(e) => { e.currentTarget.style.transform = 'scale(1.08)'; e.currentTarget.style.boxShadow = '0 12px 28px rgba(167, 139, 250, 0.4)'; }} onMouseLeave={(e) => { e.currentTarget.style.transform = 'scale(1)'; e.currentTarget.style.boxShadow = '0 8px 20px rgba(167, 139, 250, 0.3)'; }}>← </button>
+          <div className="map-ui-container">
+              <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'flex-start', justifyContent: 'flex-start', paddingTop: 24, paddingLeft: 24 }}>
+                  <button onClick={() => setViewMode('map')} style={{ width: 60, height: 60, borderRadius: '20px', backgroundColor: '#a78bfa', color: 'white', border: '3px solid white', boxShadow: '0 8px 20px rgba(167, 139, 250, 0.3)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', transition: 'all 0.3s ease', fontSize: 28, fontWeight: 'bold' }} onMouseEnter={(e) => { e.currentTarget.style.transform = 'scale(1.08)'; e.currentTarget.style.boxShadow = '0 12px 28px rgba(167, 139, 250, 0.4)'; }} onMouseLeave={(e) => { e.currentTarget.style.transform = 'scale(1)'; e.currentTarget.style.boxShadow = '0 8px 20px rgba(167, 139, 250, 0.3)'; }}>← </button>
                   {nextInstruction && (
-                    <div style={{ pointerEvents: 'auto', backgroundColor: 'rgba(255,255,255,0.95)', backdropFilter: 'blur(12px)', borderRadius: 20, padding: '12px 16px', boxShadow: '0 4px 12px rgba(0,0,0,0.15)', border: '2px solid #3b82f6', marginTop: 16, display: 'flex', alignItems: 'center', gap: 12, maxWidth: 300 }}>
+                    <div style={{ backgroundColor: 'rgba(255,255,255,0.95)', backdropFilter: 'blur(12px)', borderRadius: 20, padding: '12px 16px', boxShadow: '0 4px 12px rgba(0,0,0,0.15)', border: '2px solid #3b82f6', marginTop: 16, display: 'flex', alignItems: 'center', gap: 12, maxWidth: 300 }}>
                       <span style={{ fontSize: 24 }}>🧭</span>
                       <div style={{ display: 'flex', flexDirection: 'column' }}>
                           <span style={{ fontSize: 10, fontWeight: 'bold', color: '#9ca3af', textTransform: 'uppercase', letterSpacing: 0.5 }}>{t.nextTurn}</span>
@@ -888,7 +890,7 @@ export default function MapPage() {
                       </div>
                     </div>
                   )}
-                  <div style={{ pointerEvents: 'auto', backgroundColor: 'rgba(255,255,255,0.9)', backdropFilter: 'blur(12px)', borderRadius: 20, padding: '12px 20px', boxShadow: '0 4px 12px rgba(0,0,0,0.08)', border: '1px solid rgba(255,255,255,0.6)', marginTop: 16, display: 'flex', alignItems: 'center', gap: 20 }}>
+                  <div style={{ backgroundColor: 'rgba(255,255,255,0.9)', backdropFilter: 'blur(12px)', borderRadius: 20, padding: '12px 20px', boxShadow: '0 4px 12px rgba(0,0,0,0.08)', border: '1px solid rgba(255,255,255,0.6)', marginTop: 16, display: 'flex', alignItems: 'center', gap: 20 }}>
                       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
                           <span style={{ fontSize: 9, fontWeight: 'bold', color: '#9ca3af', textTransform: 'uppercase', letterSpacing: 0.5 }}>{t.distance}</span>
                           <span style={{ fontSize: 18, fontWeight: 'bold', color: '#111827', marginTop: 2 }}>{formatDist(navStats.distanceRem)}</span>
@@ -900,7 +902,7 @@ export default function MapPage() {
                       </div>
                   </div>
               </div>
-          </>
+          </div>
         )}
 
         {viewMode === 'history' && (
