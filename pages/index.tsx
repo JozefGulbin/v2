@@ -5,6 +5,7 @@ import ElderlyKidFriendlyNav from "@/components/ElderlyKidFriendlyNav";
 
 type ViewMode = 'landing' | 'map' | 'lost' | 'navigation' | 'history';
 type TransportMode = 'walking' | 'cycling' | 'driving';
+type Language = 'en' | 'lt';
 
 interface SavedRoute {
   id: string;
@@ -40,6 +41,73 @@ interface SegmentRoute {
   coordinates: any[];
 }
 
+interface WeatherData {
+  temp: number;
+  condition: string;
+  icon: string;
+}
+
+const translations = {
+  en: {
+    eikime: 'Eikime!',
+    jauBuvau: 'Jau buvau!',
+    sos: 'SOS',
+    navigateWithNature: 'Navigate with nature',
+    distance: 'Distance',
+    speed: 'Speed',
+    pitstops: 'PITSTOPS',
+    start: 'START',
+    chooseRoute: 'CHOOSE ROUTE',
+    mainDestinationSet: 'Main destination set! Click PIN+ to add stops.',
+    mapFailedToLoad: 'Map failed to load',
+    gpsNotAvailable: 'GPS not available',
+    routeSaved: 'Route saved!',
+    recordingStarted: 'Recording started 🔴',
+    gpxSaved: 'GPX saved!',
+    noTrailsYet: 'No trails yet...',
+    myTrails: 'My Trails',
+    loading: 'Loading route',
+    nextTurn: 'Next turn in',
+    meters: 'meters',
+    straightAhead: 'Go straight',
+    turnLeft: 'Turn left',
+    turnRight: 'Turn right',
+    uturn: 'Make a U-turn',
+    arrived: 'You have arrived',
+    weather: 'Weather',
+    temp: '°C',
+  },
+  lt: {
+    eikime: 'Eikime!',
+    jauBuvau: 'Jau buvau!',
+    sos: 'SOS',
+    navigateWithNature: 'Naršykite su gamta',
+    distance: 'Atstumas',
+    speed: 'Greitis',
+    pitstops: 'SUSTOJIMO TAŠKAI',
+    start: 'PRADŽIA',
+    chooseRoute: 'PASIRINKITE MARŠRUTĄ',
+    mainDestinationSet: 'Nustatytas pagrindinis tikslas! Norėdami pridėti sustojimą, spustelėkite PIN+.',
+    mapFailedToLoad: 'Žemėlapis nepavyko įkelti',
+    gpsNotAvailable: 'GPS nepasiekiamas',
+    routeSaved: 'Maršrutas išsaugotas!',
+    recordingStarted: 'Įrašymas pradėtas 🔴',
+    gpxSaved: 'GPX išsaugotas!',
+    noTrailsYet: 'Dar nėra šliaužų...',
+    myTrails: 'Mano šliaužos',
+    loading: 'Kraunamas maršrutas',
+    nextTurn: 'Kitas posūkis per',
+    meters: 'metrų',
+    straightAhead: 'Eikite tiesiai',
+    turnLeft: 'Susukit į kairę',
+    turnRight: 'Susukit į dešinę',
+    uturn: 'Pasukit atgal',
+    arrived: 'Jūs atvykote',
+    weather: 'Oras',
+    temp: '°C',
+  }
+};
+
 export default function MapPage() {
   const [viewMode, setViewMode] = useState<ViewMode>('landing');
   const [transportMode, setTransportMode] = useState<TransportMode>('walking');
@@ -61,6 +129,9 @@ export default function MapPage() {
   const [mapLoaded, setMapLoaded] = useState(false);
   const [highlightedSegmentIndex, setHighlightedSegmentIndex] = useState<number | null>(null);
   const [soundEnabled, setSoundEnabled] = useState(true);
+  const [language, setLanguage] = useState<Language>('en');
+  const [weather, setWeather] = useState<WeatherData | null>(null);
+  const [nextInstruction, setNextInstruction] = useState<string>('');
 
   const mapRef = useRef<any>(null);
   const mapContainerRef = useRef<HTMLDivElement>(null);
@@ -84,14 +155,26 @@ export default function MapPage() {
   const destinationRef = useRef<{ lat: number; lng: number } | null>(null);
   const isRecordingRef = useRef(false);
   const transportModeRef = useRef<TransportMode>('walking');
+  const currentRouteRef = useRef<RouteInfo | null>(null);
+
+  const t = translations[language];
 
   useEffect(() => {
     const localData = localStorage.getItem('taputapu_saved_routes');
     if (localData) setSavedRoutes(JSON.parse(localData));
+    const savedLang = localStorage.getItem('taputapu_language') as Language;
+    if (savedLang) setLanguage(savedLang);
   }, []);
 
-  useEffect(() => { 
-      if (userLocation) userLocationRef.current = { lat: userLocation.lat, lng: userLocation.lng, heading: userLocation.heading };
+  useEffect(() => {
+    localStorage.setItem('taputapu_language', language);
+  }, [language]);
+
+  useEffect(() => {
+    if (userLocation) {
+      userLocationRef.current = { lat: userLocation.lat, lng: userLocation.lng, heading: userLocation.heading };
+      fetchWeather(userLocation.lat, userLocation.lng);
+    }
   }, [userLocation]);
 
   useEffect(() => { isRecordingRef.current = isRecording; }, [isRecording]);
@@ -113,6 +196,51 @@ export default function MapPage() {
         playSound('navigation-start');
       }
   }, [viewMode]);
+
+  const fetchWeather = async (lat: number, lon: number) => {
+    try {
+      const response = await fetch(
+        `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,weather_code&temperature_unit=celsius`
+      );
+      const data = await response.json();
+      if (data.current) {
+        const code = data.current.weather_code;
+        let icon = '☀️';
+        if (code === 0) icon = '☀️';
+        else if (code === 1 || code === 2) icon = '🌤️';
+        else if (code === 3) icon = '☁️';
+        else if (code === 45 || code === 48) icon = '🌫️';
+        else if (code >= 51 && code <= 67) icon = '🌧️';
+        else if (code >= 80 && code <= 82) icon = '⛈️';
+        else if (code >= 85 && code <= 86) icon = '❄️';
+        
+        setWeather({
+          temp: Math.round(data.current.temperature_2m),
+          condition: icon,
+          icon: icon
+        });
+      }
+    } catch (error) {
+      console.error('Weather fetch error:', error);
+    }
+  };
+
+  const getInstructionIcon = (instruction: string) => {
+    if (!instruction) return '➡️';
+    const lower = instruction.toLowerCase();
+    if (lower.includes('left')) return '↙️';
+    if (lower.includes('right')) return '↘️';
+    if (lower.includes('straight') || lower.includes('continue')) return '⬇️';
+    if (lower.includes('uturn') || lower.includes('u-turn')) return '🔄';
+    return '➡️';
+  };
+
+  const getNextTurnInstruction = (route: RouteInfo) => {
+    if (!route || !route.instructions || route.instructions.length === 0) return '';
+    const nextInst = route.instructions[0];
+    if (!nextInst) return '';
+    return `${getInstructionIcon(nextInst.text)} ${nextInst.text} - ${Math.round(nextInst.distance)}m`;
+  };
 
   const speak = (text: string) => {
     if (!soundEnabled || typeof window === 'undefined') return;
@@ -229,7 +357,7 @@ export default function MapPage() {
             else { 
               if (!mainDestination) {
                 setMainDestination({ lat: e.latlng.lat, lng: e.latlng.lng });
-                setNotification({ type: 'info', msg: 'Main destination set! Click PIN+ to add stops.' });
+                setNotification({ type: 'info', msg: t.mainDestinationSet });
               }
             }
         };
@@ -239,7 +367,7 @@ export default function MapPage() {
         map.locate({ setView: true, maxZoom: 15, enableHighAccuracy: true });
       } catch (error) {
         console.error('Map error:', error);
-        setNotification({ type: 'error', msg: 'Map failed to load' });
+        setNotification({ type: 'error', msg: t.mapFailedToLoad });
       }
     };
     setTimeout(initMap, 300);
@@ -253,7 +381,7 @@ export default function MapPage() {
 
   const startGpsTracking = () => {
     if (!navigator.geolocation) {
-      setNotification({ type: 'error', msg: 'GPS not available' });
+      setNotification({ type: 'error', msg: t.gpsNotAvailable });
       return;
     }
     const onGeoSuccess = (pos: GeolocationPosition) => {
@@ -281,18 +409,22 @@ export default function MapPage() {
             mapRef.current.setView([latitude, longitude], 18, { animate: true });
             const distRem = destinationRef.current ? getDistanceFromLatLonInM(latitude, longitude, destinationRef.current.lat, destinationRef.current.lng) : 0;
             
+            if (currentRouteRef.current) {
+              setNextInstruction(getNextTurnInstruction(currentRouteRef.current));
+            }
+
             if (soundEnabled) {
               if (distRem < 50 && lastAnnounceDistRef.current > 50) {
                 playSound('destination-reached');
-                speak('You have arrived at your destination');
+                speak(t.arrived);
                 lastAnnounceDistRef.current = distRem;
               } else if (distRem < 200 && lastAnnounceDistRef.current > 200) {
                 playSound('waypoint');
-                speak(`${Math.round(distRem)} meters to destination`);
+                speak(`${Math.round(distRem)} ${t.meters}`);
                 lastAnnounceDistRef.current = distRem;
               } else if (distRem < 500 && lastAnnounceDistRef.current > 500) {
                 playSound('turn-alert');
-                speak(`${Math.round(distRem)} meters remaining`);
+                speak(`${Math.round(distRem)} ${t.meters}`);
                 lastAnnounceDistRef.current = distRem;
               }
             }
@@ -358,7 +490,7 @@ export default function MapPage() {
     if (mainDestination && userLocationRef.current && viewMode === 'navigation') {
       const coords = `${userLocationRef.current.lng},${userLocationRef.current.lat};${mainDestination.lng},${mainDestination.lat}`;
       const profile = transportModeRef.current === 'walking' ? 'foot' : transportModeRef.current === 'cycling' ? 'bike' : 'car';
-      fetch(`https://router.project-osrm.org/route/v1/${profile}/${coords}?overview=full&geometries=geojson`)
+      fetch(`https://router.project-osrm.org/route/v1/${profile}/${coords}?overview=full&geometries=geojson&steps=true&annotations=distance`)
         .then(res => res.json())
         .then(data => {
           if (data.routes && data.routes[0]) {
@@ -499,8 +631,9 @@ export default function MapPage() {
     routes.forEach((route, i) => {
         const isActive = i === selectedRouteIndex;
         const isNavigating = viewMode === 'navigation';
-        if (isNavigating && !isActive) {
-          return;
+        if (isNavigating) {
+          if (isActive) currentRouteRef.current = route;
+          if (!isActive) return;
         }
         const polyline = L.polyline(route.coordinates, { 
           color: isActive ? '#3b82f6' : '#93c5fd', 
@@ -546,10 +679,10 @@ export default function MapPage() {
       const updated = [newSavedRoute, ...savedRoutes];
       setSavedRoutes(updated);
       localStorage.setItem('taputapu_saved_routes', JSON.stringify(updated));
-      setNotification({ type: 'info', msg: 'Route saved!' });
+      setNotification({ type: 'info', msg: t.routeSaved });
     } else {
       setRecordedPath([]); setTotalRecordedDist(0); setRecordingStartTime(Date.now()); setIsRecording(true);
-      setNotification({ type: 'info', msg: 'Recording started 🔴' });
+      setNotification({ type: 'info', msg: t.recordingStarted });
     }
   };
 
@@ -562,7 +695,7 @@ export default function MapPage() {
         const poly = L.polyline(route.path, { color: '#a2e1c8', weight: 8, opacity: 0.8, lineCap: 'round', dashArray: '5, 10' }).addTo(mapRef.current);
         highlightLayerRef.current = poly;
         mapRef.current.fitBounds(poly.getBounds(), { padding: [50, 50] });
-        setNotification({ type: 'info', msg: `Loading route (${route.date})` });
+        setNotification({ type: 'info', msg: `${t.loading} (${route.date})` });
     }, 600);
   };
 
@@ -601,11 +734,15 @@ export default function MapPage() {
             <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 40, zIndex: 10 }}>
               <div style={{ marginBottom: 20, textAlign: 'center' }}>
                 <h1 style={{ fontSize: 56, fontWeight: 'bold', color: '#0f5f0f', textShadow: '2px 2px 4px rgba(0,0,0,0.2)' }}>TapuTapu</h1>
-                <p style={{ fontSize: 16, color: '#1b4d1b', marginTop: 8, fontStyle: 'italic' }}>Navigate with nature</p>
+                <p style={{ fontSize: 16, color: '#1b4d1b', marginTop: 8, fontStyle: 'italic' }}>{t.navigateWithNature}</p>
               </div>
-              <button onClick={() => setViewMode('map')} style={{ width: 280, height: 70, borderRadius: 20, backgroundColor: '#10b981', color: 'white', fontSize: 28, fontWeight: 'bold', border: '4px solid white', cursor: 'pointer', transition: 'all 0.3s ease', boxShadow: '0 10px 30px rgba(16, 185, 129, 0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 12 }} onMouseEnter={(e) => { e.currentTarget.style.transform = 'scale(1.08)'; e.currentTarget.style.boxShadow = '0 15px 40px rgba(16, 185, 129, 0.6)'; }} onMouseLeave={(e) => { e.currentTarget.style.transform = 'scale(1)'; e.currentTarget.style.boxShadow = '0 10px 30px rgba(16, 185, 129, 0.4)'; }}>🗺️ Eikime!</button>
-              <button onClick={() => setViewMode('history')} style={{ width: 280, height: 70, borderRadius: 20, backgroundColor: '#3b82f6', color: 'white', fontSize: 28, fontWeight: 'bold', border: '4px solid white', cursor: 'pointer', transition: 'all 0.3s ease', boxShadow: '0 10px 30px rgba(59, 130, 246, 0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 12 }} onMouseEnter={(e) => { e.currentTarget.style.transform = 'scale(1.08)'; e.currentTarget.style.boxShadow = '0 15px 40px rgba(59, 130, 246, 0.6)'; }} onMouseLeave={(e) => { e.currentTarget.style.transform = 'scale(1)'; e.currentTarget.style.boxShadow = '0 10px 30px rgba(59, 130, 246, 0.4)'; }}>📚 Jau buvau!</button>
-              <button onClick={() => setViewMode('lost')} style={{ width: 280, height: 70, borderRadius: 20, backgroundColor: '#dc2626', color: 'white', fontSize: 28, fontWeight: 'bold', border: '4px solid white', cursor: 'pointer', transition: 'all 0.3s ease', boxShadow: '0 10px 30px rgba(220, 38, 38, 0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 12 }} onMouseEnter={(e) => { e.currentTarget.style.transform = 'scale(1.08)'; e.currentTarget.style.boxShadow = '0 15px 40px rgba(220, 38, 38, 0.6)'; }} onMouseLeave={(e) => { e.currentTarget.style.transform = 'scale(1)'; e.currentTarget.style.boxShadow = '0 10px 30px rgba(220, 38, 38, 0.4)'; }}>🆘 SOS</button>
+              <button onClick={() => setViewMode('map')} style={{ width: 280, height: 70, borderRadius: 20, backgroundColor: '#10b981', color: 'white', fontSize: 28, fontWeight: 'bold', border: '4px solid white', cursor: 'pointer', transition: 'all 0.3s ease', boxShadow: '0 10px 30px rgba(16, 185, 129, 0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 12 }} onMouseEnter={(e) => { e.currentTarget.style.transform = 'scale(1.08)'; e.currentTarget.style.boxShadow = '0 15px 40px rgba(16, 185, 129, 0.6)'; }} onMouseLeave={(e) => { e.currentTarget.style.transform = 'scale(1)'; e.currentTarget.style.boxShadow = '0 10px 30px rgba(16, 185, 129, 0.4)'; }}>🗺️ {t.eikime}</button>
+              <button onClick={() => setViewMode('history')} style={{ width: 280, height: 70, borderRadius: 20, backgroundColor: '#3b82f6', color: 'white', fontSize: 28, fontWeight: 'bold', border: '4px solid white', cursor: 'pointer', transition: 'all 0.3s ease', boxShadow: '0 10px 30px rgba(59, 130, 246, 0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 12 }} onMouseEnter={(e) => { e.currentTarget.style.transform = 'scale(1.08)'; e.currentTarget.style.boxShadow = '0 15px 40px rgba(59, 130, 246, 0.6)'; }} onMouseLeave={(e) => { e.currentTarget.style.transform = 'scale(1)'; e.currentTarget.style.boxShadow = '0 10px 30px rgba(59, 130, 246, 0.4)'; }}>📚 {t.jauBuvau}</button>
+              <button onClick={() => setViewMode('lost')} style={{ width: 280, height: 70, borderRadius: 20, backgroundColor: '#dc2626', color: 'white', fontSize: 28, fontWeight: 'bold', border: '4px solid white', cursor: 'pointer', transition: 'all 0.3s ease', boxShadow: '0 10px 30px rgba(220, 38, 38, 0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 12 }} onMouseEnter={(e) => { e.currentTarget.style.transform = 'scale(1.08)'; e.currentTarget.style.boxShadow = '0 15px 40px rgba(220, 38, 38, 0.6)'; }} onMouseLeave={(e) => { e.currentTarget.style.transform = 'scale(1)'; e.currentTarget.style.boxShadow = '0 10px 30px rgba(220, 38, 38, 0.4)'; }}>🆘 {t.sos}</button>
+            </div>
+            <div style={{ position: 'absolute', bottom: 32, right: 32, zIndex: 10, display: 'flex', gap: 8 }}>
+              <button onClick={() => setLanguage('en')} style={{ width: 50, height: 50, borderRadius: '50%', backgroundColor: language === 'en' ? '#3b82f6' : '#f3f4f6', color: language === 'en' ? 'white' : '#6b7280', border: 'none', cursor: 'pointer', fontWeight: 'bold', fontSize: 16, transition: 'all 0.3s' }}>EN</button>
+              <button onClick={() => setLanguage('lt')} style={{ width: 50, height: 50, borderRadius: '50%', backgroundColor: language === 'lt' ? '#3b82f6' : '#f3f4f6', color: language === 'lt' ? 'white' : '#6b7280', border: 'none', cursor: 'pointer', fontWeight: 'bold', fontSize: 16, transition: 'all 0.3s' }}>LT</button>
             </div>
           </>
         )}
@@ -626,7 +763,17 @@ export default function MapPage() {
               </div>
               <div style={{ position: 'absolute', top: 32, right: 32, zIndex: 1000, display: 'flex', gap: 12 }}>
                   <button onClick={() => setSoundEnabled(!soundEnabled)} style={{ width: 48, height: 48, borderRadius: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 24, backgroundColor: soundEnabled ? '#16a34a' : '#f3f4f6', border: 'none', cursor: 'pointer', transition: 'all 0.3s' }}>{soundEnabled ? '🔊' : '🔇'}</button>
+                  <button onClick={() => setLanguage(language === 'en' ? 'lt' : 'en')} style={{ width: 48, height: 48, borderRadius: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, backgroundColor: '#3b82f6', color: 'white', border: 'none', cursor: 'pointer', fontWeight: 'bold', transition: 'all 0.3s' }}>{language.toUpperCase()}</button>
               </div>
+              {weather && (
+                <div style={{ position: 'absolute', top: 32, left: '50%', transform: 'translateX(-50%)', zIndex: 1000, backgroundColor: 'rgba(255,255,255,0.95)', backdropFilter: 'blur(12px)', borderRadius: 20, padding: '8px 16px', boxShadow: '0 4px 12px rgba(0,0,0,0.1)', border: '1px solid rgba(255,255,255,0.5)', display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <span style={{ fontSize: 28 }}>{weather.icon}</span>
+                  <div style={{ display: 'flex', flexDirection: 'column' }}>
+                    <span style={{ fontSize: 11, fontWeight: 'bold', color: '#9ca3af' }}>{t.weather}</span>
+                    <span style={{ fontSize: 16, fontWeight: 'bold', color: '#111827' }}>{weather.temp}{t.temp}</span>
+                  </div>
+                </div>
+              )}
               <div style={{ position: 'absolute', top: 128, right: 32, zIndex: 1000, display: 'flex', flexDirection: 'column', gap: 24 }}>
                   <button onClick={toggleRecording} style={{ width: 64, height: 64, borderRadius: 32, boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', transition: 'all 0.3s', border: `4px solid ${isRecording ? '#fca5a5' : 'white'}`, backgroundColor: isRecording ? '#dc2626' : 'white', color: isRecording ? 'white' : '#dc2626', cursor: 'pointer' }}>
                      <div style={{ width: 16, height: 16, borderRadius: '50%', backgroundColor: isRecording ? 'white' : '#dc2626', animation: isRecording ? 'pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite' : 'none' }} />
@@ -645,10 +792,10 @@ export default function MapPage() {
               </div>
               {isBuilderMode && (
                   <div style={{ position: 'absolute', bottom: 40, left: 32, zIndex: 1000, pointerEvents: 'auto', backgroundColor: 'rgba(255,255,255,0.97)', backdropFilter: 'blur(12px)', borderRadius: 40, padding: 20, boxShadow: '0 10px 30px rgba(0,0,0,0.15)', border: '2px solid white', maxWidth: 320 }}>
-                      <h4 style={{ color: '#111827', fontWeight: 'bold', marginBottom: 16, fontSize: 14 }}>📍 PITSTOPS</h4>
+                      <h4 style={{ color: '#111827', fontWeight: 'bold', marginBottom: 16, fontSize: 14 }}>📍 {t.pitstops}</h4>
                       <div style={{ display: 'flex', flexDirection: 'column', gap: 12, maxHeight: 300, overflowY: 'auto' }}>
                           <div onClick={() => { setViewMode('navigation'); destinationRef.current = mainDestination; }} style={{ backgroundColor: '#f3f4f6', padding: 12, borderRadius: 12, display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer', transition: 'all 0.2s', border: '2px solid #3b82f6' }}>
-                              <span style={{ fontWeight: 'bold', color: '#111827', fontSize: 16 }}>PIN A (📍 START)</span>
+                              <span style={{ fontWeight: 'bold', color: '#111827', fontSize: 16 }}>PIN A ({t.start})</span>
                               <span style={{ fontSize: 20, color: '#3b82f6' }}>▶</span>
                           </div>
                           {pinSegments.length > 0 && pinSegments.map((pin, idx) => (
@@ -673,7 +820,7 @@ export default function MapPage() {
                   <div style={{ position: 'absolute', bottom: 40, right: 32, zIndex: 1000, width: '100%', maxWidth: 420, pointerEvents: 'none', display: 'flex', flexDirection: 'column', gap: 16, alignItems: 'flex-end' }}>
                       {showRouteSelector && (
                           <div style={{ pointerEvents: 'auto', backgroundColor: 'rgba(255,255,255,0.97)', backdropFilter: 'blur(12px)', borderRadius: 56, padding: 28, boxShadow: '0 25px 40px -5px rgba(0,0,0,0.15)', maxHeight: '55vh', overflow: 'auto', border: '2px solid white', width: '100%' }}>
-                              <h3 style={{ fontWeight: 'bold', fontSize: 14, textTransform: 'uppercase', letterSpacing: 1.5, color: '#3b82f6', marginBottom: 20, display: 'flex', alignItems: 'center', gap: 8 }}>🔀 CHOOSE ROUTE</h3>
+                              <h3 style={{ fontWeight: 'bold', fontSize: 14, textTransform: 'uppercase', letterSpacing: 1.5, color: '#3b82f6', marginBottom: 20, display: 'flex', alignItems: 'center', gap: 8 }}>🔀 {t.chooseRoute}</h3>
                               <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
                                   {routes.map((route, idx) => (
                                       <button key={idx} onClick={() => { setSelectedRouteIndex(idx); setShowRouteSelector(false); }} style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: 18, backgroundColor: selectedRouteIndex === idx ? '#dbeafe' : '#f9fafb', borderRadius: 20, cursor: 'pointer', transition: 'all 0.3s ease', border: selectedRouteIndex === idx ? '3px solid #3b82f6' : '2px solid #e5e7eb', textAlign: 'left', boxShadow: selectedRouteIndex === idx ? '0 4px 12px rgba(59, 130, 246, 0.15)' : 'none' }}>
@@ -713,11 +860,66 @@ export default function MapPage() {
               <div ref={mapContainerNavRef} style={{ position: 'absolute', inset: 0, zIndex: 0, width: '100%', height: '100%' }} />
               <div style={{ position: 'absolute', inset: 0, zIndex: 1000, display: 'flex', flexDirection: 'column', alignItems: 'flex-start', justifyContent: 'flex-start', paddingTop: 24, paddingLeft: 24, pointerEvents: 'none' }}>
                   <button onClick={() => setViewMode('map')} style={{ pointerEvents: 'auto', width: 60, height: 60, borderRadius: '20px', backgroundColor: '#a78bfa', color: 'white', border: '3px solid white', boxShadow: '0 8px 20px rgba(167, 139, 250, 0.3)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', transition: 'all 0.3s ease', fontSize: 28, fontWeight: 'bold' }} onMouseEnter={(e) => { e.currentTarget.style.transform = 'scale(1.08)'; e.currentTarget.style.boxShadow = '0 12px 28px rgba(167, 139, 250, 0.4)'; }} onMouseLeave={(e) => { e.currentTarget.style.transform = 'scale(1)'; e.currentTarget.style.boxShadow = '0 8px 20px rgba(167, 139, 250, 0.3)'; }}>← </button>
+                  {nextInstruction && (
+                    <div style={{ pointerEvents: 'auto', backgroundColor: 'rgba(255,255,255,0.95)', backdropFilter: 'blur(12px)', borderRadius: 20, padding: '12px 16px', boxShadow: '0 4px 12px rgba(0,0,0,0.15)', border: '2px solid #3b82f6', marginTop: 16, display: 'flex', alignItems: 'center', gap: 12, maxWidth: 300 }}>
+                      <span style={{ fontSize: 24 }}>🧭</span>
+                      <div style={{ display: 'flex', flexDirection: 'column' }}>
+                          <span style={{ fontSize: 10, fontWeight: 'bold', color: '#9ca3af', textTransform: 'uppercase', letterSpacing: 0.5 }}>{t.nextTurn}</span>
+                          <span style={{ fontSize: 14, fontWeight: 'bold', color: '#111827', marginTop: 2 }}>{nextInstruction}</span>
+                      </div>
+                    </div>
+                  )}
                   <div style={{ pointerEvents: 'auto', backgroundColor: 'rgba(255,255,255,0.9)', backdropFilter: 'blur(12px)', borderRadius: 20, padding: '12px 20px', boxShadow: '0 4px 12px rgba(0,0,0,0.08)', border: '1px solid rgba(255,255,255,0.6)', marginTop: 16, display: 'flex', alignItems: 'center', gap: 20 }}>
                       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-                          <span style={{ fontSize: 9, fontWeight: 'bold', color: '#9ca3af', textTransform: 'uppercase', letterSpacing: 0.5 }}>Distance</span>
+                          <span style={{ fontSize: 9, fontWeight: 'bold', color: '#9ca3af', textTransform: 'uppercase', letterSpacing: 0.5 }}>{t.distance}</span>
                           <span style={{ fontSize: 18, fontWeight: 'bold', color: '#111827', marginTop: 2 }}>{formatDist(navStats.distanceRem)}</span>
                       </div>
                       <div style={{ width: 1, backgroundColor: '#e5e7eb', height: 50 }} />
                       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-                          <span style={{ fontSize: 9, fontWeight: 'bold', color: '#9ca3af', textTransform: 'uppercase', letterSpacing: 0
+                          <span style={{ fontSize: 9, fontWeight: 'bold', color: '#9ca3af', textTransform: 'uppercase', letterSpacing: 0.5 }}>{t.speed}</span>
+                          <span style={{ fontSize: 18, fontWeight: 'bold', color: '#16a34a', marginTop: 2 }}>{navStats.speed} km/h</span>
+                      </div>
+                  </div>
+              </div>
+          </>
+        )}
+
+        {viewMode === 'history' && (
+            <div style={{ position: 'absolute', inset: 0, zIndex: 5000, backgroundColor: '#f8fafc', padding: 40, overflow: 'auto' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 24, marginBottom: 48 }}>
+                    <button onClick={() => setViewMode('landing')} style={{ width: 64, height: 64, backgroundColor: 'white', borderRadius: '50%', boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 32, border: 'none', cursor: 'pointer' }}>←</button>
+                    <h1 style={{ fontSize: 32, fontWeight: 'bold', color: '#111827', letterSpacing: -1 }}>{t.myTrails}</h1>
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 24, paddingBottom: 96 }}>
+                    {savedRoutes.map((route) => (
+                        <div key={route.id} style={{ backgroundColor: 'white', padding: 32, borderRadius: 56, boxShadow: '0 1px 3px 0 rgba(0, 0, 0, 0.1)', border: '2px solid transparent', transition: 'all 0.3s', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <div onClick={() => loadSavedRoute(route)} style={{ display: 'flex', flexDirection: 'column', flex: 1, cursor: 'pointer' }}>
+                                <span style={{ fontWeight: 'bold', fontSize: 20, color: '#111827' }}>{route.date}</span>
+                                <span style={{ color: '#16a34a', fontSize: 12, fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: 1, marginTop: 4 }}>{(route.distance/1000).toFixed(2)} km • {route.pace} min/km</span>
+                            </div>
+                            <div style={{ display: 'flex', gap: 16 }}>
+                                <button onClick={() => { const gpx = `<?xml version="1.0" encoding="UTF-8"?><gpx version="1.1" creator="TapuTapu"><trk><trkseg>${route.path.map(pt => `<trkpt lat="${pt.lat}" lon="${pt.lng}"></trkpt>`).join('')}</trkseg></trk></gpx>`; const blob = new Blob([gpx], { type: 'application/gpx+xml' }); const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href = url; a.download = `trail-${route.id}.gpx`; a.click(); setNotification({ type: 'info', msg: t.gpxSaved }); }} style={{ width: 56, height: 56, backgroundColor: '#ecfdf5', color: '#10b981', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20, cursor: 'pointer', border: 'none' }}>💾</button>
+                                <button onClick={() => { if(confirm('Delete?')) { const u = savedRoutes.filter(r => r.id !== route.id); setSavedRoutes(u); localStorage.setItem('taputapu_saved_routes', JSON.stringify(u)); } }} style={{ width: 56, height: 56, backgroundColor: '#fef2f2', color: '#dc2626', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20, cursor: 'pointer', border: 'none' }}>🗑</button>
+                            </div>
+                        </div>
+                    ))}
+                    {savedRoutes.length === 0 && <div style={{ textAlign: 'center', paddingTop: 160, color: '#d1d5db', fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: 1, opacity: 0.4, fontStyle: 'italic' }}>{t.noTrailsYet}</div>}
+                </div>
+            </div>
+        )}
+
+        {viewMode === 'lost' && (
+          <div style={{ position: 'absolute', inset: 0, zIndex: 7000 }}>
+              <LostView lat={userLocation?.lat || 0} lng={userLocation?.lng || 0} onClose={() => setViewMode('landing')} />
+          </div>
+        )}
+
+        {notification && viewMode !== 'navigation' && (
+          <div style={{ position: 'absolute', top: 32, right: 120, zIndex: 8000, backgroundColor: '#1f2937', color: 'white', paddingLeft: 28, paddingRight: 28, paddingTop: 14, paddingBottom: 14, borderRadius: 9999, boxShadow: '0 10px 25px -5px rgba(0,0,0,0.2)', fontSize: 14, fontWeight: 'bold', whiteSpace: 'nowrap', border: '2px solid rgba(255,255,255,0.15)', backdropFilter: 'blur(12px)' }}>
+              {notification.msg}
+          </div>
+        )}
+      </div>
+    </>
+  );
+}
