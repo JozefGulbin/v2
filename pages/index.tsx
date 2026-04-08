@@ -135,7 +135,6 @@ export default function MapPage() {
   const mapRef = useRef<any>(null);
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapContainerNavRef = useRef<HTMLDivElement>(null);
-  const mapInitializedRef = useRef(false);
   const routingControlRef = useRef<any>(null);
   const routePolylinesRef = useRef<any[]>([]);
   const mainRoutePolylineRef = useRef<any>(null);
@@ -326,89 +325,58 @@ export default function MapPage() {
     }
   };
 
-  // Initialize map ONCE, when component mounts
+  // Initialize map when viewMode changes to map or navigation
   useEffect(() => {
-    if (typeof window === 'undefined' || mapInitializedRef.current) return;
-    
-    const initializeMap = async () => {
-      if (!(window as any).L) {
-        setTimeout(initializeMap, 100);
-        return;
-      }
-
-      const L = (window as any).L;
-      
-      // Create a hidden container for the map
-      const tempContainer = document.createElement('div');
-      tempContainer.style.display = 'none';
-      tempContainer.style.position = 'absolute';
-      tempContainer.style.width = '100%';
-      tempContainer.style.height = '100%';
-      document.body.appendChild(tempContainer);
-
-      try {
-        const map = L.map(tempContainer, { 
-          zoomControl: false, 
-          attributionControl: false, 
-          preferCanvas: true 
-        }).setView([54.6872, 25.2797], 15);
-        
-        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { 
-          maxZoom: 19 
-        }).addTo(map);
-        
-        const handleMapClick = (e: any) => {
-            if (isNavigatingRef.current) return;
-            if (highlightLayerRef.current) highlightLayerRef.current.remove();
-            if (isBuilderModeRef.current) {
-              setPinSegments(prev => {
-                const newPin: PinSegment = {
-                  letter: String.fromCharCode(66 + prev.length),
-                  lat: e.latlng.lat,
-                  lng: e.latlng.lng
-                };
-                return [...prev, newPin];
-              });
-            }
-            else { 
-              if (!mainDestination) {
-                setMainDestination({ lat: e.latlng.lat, lng: e.latlng.lng });
-              }
-            }
-        };
-        
-        map.on('click', handleMapClick);
-        mapRef.current = map;
-        mapInitializedRef.current = true;
-        startGpsTracking();
-        map.locate({ setView: true, maxZoom: 15, enableHighAccuracy: true });
-      } catch (error) {
-        console.error('Map initialization error:', error);
-        setNotification({ type: 'error', msg: t.mapFailedToLoad });
-      }
-    };
-
-    initializeMap();
-  }, []);
-
-  // Mount/unmount map to the active container
-  useEffect(() => {
-    if (!mapRef.current || !mapInitializedRef.current) return;
-
-    const activeContainer = viewMode === 'navigation' ? mapContainerNavRef.current : mapContainerRef.current;
-    if (!activeContainer) return;
-
-    try {
-      const mapContainer = mapRef.current.getContainer();
-      if (mapContainer.parentNode) {
-        mapContainer.parentNode.removeChild(mapContainer);
-      }
-      activeContainer.appendChild(mapContainer);
-      mapRef.current.invalidateSize();
-    } catch (error) {
-      console.error('Error mounting map:', error);
+    if (viewMode !== 'map' && viewMode !== 'navigation') return;
+    if (!mapRef.current && (mapContainerRef.current || mapContainerNavRef.current)) {
+      initMap();
     }
   }, [viewMode]);
+
+  const initMap = () => {
+    if (typeof window === 'undefined') return;
+    const L = (window as any).L;
+    if (!L) {
+      setTimeout(initMap, 100);
+      return;
+    }
+
+    const container = viewMode === 'navigation' ? mapContainerNavRef.current : mapContainerRef.current;
+    if (!container || container.children.length > 0) return;
+
+    try {
+      const map = L.map(container, { zoomControl: false, attributionControl: false, preferCanvas: true }).setView([54.6872, 25.2797], 15);
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 }).addTo(map);
+      
+      const handleMapClick = (e: any) => {
+          if (isNavigatingRef.current) return;
+          if (highlightLayerRef.current) highlightLayerRef.current.remove();
+          if (isBuilderModeRef.current) {
+            setPinSegments(prev => {
+              const newPin: PinSegment = {
+                letter: String.fromCharCode(66 + prev.length),
+                lat: e.latlng.lat,
+                lng: e.latlng.lng
+              };
+              return [...prev, newPin];
+            });
+          }
+          else { 
+            if (!mainDestination) {
+              setMainDestination({ lat: e.latlng.lat, lng: e.latlng.lng });
+            }
+          }
+      };
+      
+      map.on('click', handleMapClick);
+      mapRef.current = map;
+      startGpsTracking();
+      map.locate({ setView: true, maxZoom: 15, enableHighAccuracy: true });
+    } catch (error) {
+      console.error('Map initialization error:', error);
+      setNotification({ type: 'error', msg: t.mapFailedToLoad });
+    }
+  };
 
   const startGpsTracking = () => {
     if (!navigator.geolocation) {
