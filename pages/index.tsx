@@ -721,8 +721,6 @@ export default function MapPage() {
           * { margin: 0; padding: 0; box-sizing: border-box; }
           html, body { width: 100%; height: 100%; overflow: hidden !important; position: fixed !important; }
           #__next { width: 100%; height: 100%; overflow: hidden !important; }
-          #map-wrapper { display: none; }
-          #map-wrapper.active { display: block; }
           @keyframes flowerpetal { 0% { transform: translateY(-10vh) translateX(0) rotate(0deg); } 100% { transform: translateY(110vh) translateX(20px) rotate(360deg); } }
           @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
           @keyframes float { 0%, 100% { transform: translateY(0px); } 50% { transform: translateY(-20px); } }
@@ -733,10 +731,6 @@ export default function MapPage() {
       </Head>
 
       <div style={{ width: '100vw', height: '100vh', margin: 0, padding: 0, overflow: 'hidden', backgroundColor: '#f0fdf4', fontFamily: 'Arial, sans-serif', position: 'fixed', top: 0, left: 0 }}>
-
-        {(viewMode === 'map' || viewMode === 'navigation') && (
-          <style>{`#map-wrapper { display: block !important; }`}</style>
-        )}
 
         {viewMode === 'landing' && (
           <>
