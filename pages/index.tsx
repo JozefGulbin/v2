@@ -335,9 +335,16 @@ export default function MapPage() {
         return;
       }
       const L = (window as any).L;
-      if (mapRef.current) return;
-      const container = viewMode === 'navigation' ? mapContainerNavRef.current : mapContainerRef.current;
+      if (mapRef.current) {
+        if (mapRef.current) {
+          setTimeout(() => mapRef.current.invalidateSize(), 100);
+        }
+        return;
+      }
+
+      const container = mapContainerRef.current;
       if (!container) return;
+
       try {
         const map = L.map(container, { zoomControl: false, attributionControl: false, preferCanvas: true }).setView([54.6872, 25.2797], 15);
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 }).addTo(map);
@@ -376,6 +383,9 @@ export default function MapPage() {
   useEffect(() => {
     if (viewMode === 'map' || viewMode === 'navigation') {
       if (!mapLoaded) setMapLoaded(true);
+      if (mapRef.current) {
+        setTimeout(() => mapRef.current.invalidateSize(), 100);
+      }
     }
   }, [viewMode, mapLoaded]);
 
@@ -483,11 +493,14 @@ export default function MapPage() {
   useEffect(() => {
     const L = (window as any).L;
     if (!mapRef.current || !L) return;
+
     if (mainRoutePolylineRef.current) {
       mainRoutePolylineRef.current.remove();
       mainRoutePolylineRef.current = null;
     }
-    if (mainDestination && userLocationRef.current && viewMode === 'navigation') {
+
+    // ONLY show blue main route DURING NAVIGATION and ONLY if NO pin segments
+    if (mainDestination && userLocationRef.current && viewMode === 'navigation' && pinSegments.length === 0) {
       const coords = `${userLocationRef.current.lng},${userLocationRef.current.lat};${mainDestination.lng},${mainDestination.lat}`;
       const profile = transportModeRef.current === 'walking' ? 'foot' : transportModeRef.current === 'cycling' ? 'bike' : 'car';
       fetch(`https://router.project-osrm.org/route/v1/${profile}/${coords}?overview=full&geometries=geojson&steps=true&annotations=distance`)
@@ -506,7 +519,7 @@ export default function MapPage() {
         })
         .catch(err => console.error('Main route fetch error:', err));
     }
-  }, [mainDestination, transportMode, viewMode]);
+  }, [mainDestination, transportMode, viewMode, pinSegments]);
 
   const fetchSegmentRoute = async (from: { lat: number; lng: number }, to: PinSegment, fromLetter: string, toIndex: number) => {
     const coords = `${from.lng},${from.lat};${to.lng},${to.lat}`;
