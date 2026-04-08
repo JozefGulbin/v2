@@ -333,10 +333,27 @@ export default function MapPage() {
     const L = (window as any).L;
     const container = viewMode === 'navigation' ? mapContainerNavRef.current : mapContainerRef.current;
     
-    if (!container) return;
-    if (mapRef.current) return;
+    if (!container) {
+      console.error('Container not found for viewMode:', viewMode);
+      return;
+    }
+    
+    if (mapRef.current) {
+      console.log('Map already initialized, invalidating size');
+      mapRef.current.invalidateSize();
+      return;
+    }
 
     try {
+      console.log('Initializing map in container:', viewMode);
+      
+      container.style.width = '100%';
+      container.style.height = '100%';
+      container.style.position = 'absolute';
+      container.style.top = '0';
+      container.style.left = '0';
+      container.style.zIndex = '0';
+
       while (container.firstChild) {
         container.removeChild(container.firstChild);
       }
@@ -374,10 +391,16 @@ export default function MapPage() {
       map.on('click', handleMapClick);
       mapRef.current = map;
       
+      setTimeout(() => {
+        map.invalidateSize();
+      }, 100);
+      
       if (navigator.geolocation) {
         startGpsTracking();
         map.locate({ setView: true, maxZoom: 15, enableHighAccuracy: true });
       }
+
+      console.log('Map initialized successfully');
     } catch (error) {
       console.error('Map initialization error:', error);
       setNotification({ type: 'error', msg: t.mapFailedToLoad });
@@ -385,7 +408,17 @@ export default function MapPage() {
   };
 
   useEffect(() => {
-    if (viewMode !== 'map' && viewMode !== 'navigation') return;
+    if (viewMode !== 'map' && viewMode !== 'navigation') {
+      if (mapRef.current) {
+        try {
+          mapRef.current.remove();
+          mapRef.current = null;
+        } catch (e) {
+          console.error('Error removing map:', e);
+        }
+      }
+      return;
+    }
     
     const timer = setTimeout(() => {
       initMap();
@@ -766,7 +799,7 @@ export default function MapPage() {
 
         {viewMode === 'map' && (
           <>
-              <div ref={mapContainerRef} style={{ position: 'absolute', inset: 0, zIndex: 0, width: '100%', height: '100%' }} />
+              <div ref={mapContainerRef} style={{ position: 'absolute', inset: 0, zIndex: 0, width: '100%', height: '100%', top: 0, left: 0 }} />
               <div style={{ position: 'absolute', top: 32, left: 0, right: 0, zIndex: 1000, display: 'flex', justifyContent: 'center', pointerEvents: 'none', paddingLeft: 24, paddingRight: 24 }}>
                   <div style={{ pointerEvents: 'auto', backgroundColor: 'rgba(255,255,255,0.95)', backdropFilter: 'blur(12px)', boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1)', borderRadius: 9999, padding: 10, display: 'flex', alignItems: 'center', border: '1px solid rgba(255,255,255,0.5)' }}>
                      <button onClick={() => setViewMode('landing')} style={{ width: 48, height: 48, borderRadius: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 24, backgroundColor: '#f3f4f6', border: 'none', cursor: 'pointer' }}>🏠</button>
@@ -874,7 +907,7 @@ export default function MapPage() {
 
         {viewMode === 'navigation' && (
           <>
-              <div ref={mapContainerNavRef} style={{ position: 'absolute', inset: 0, zIndex: 0, width: '100%', height: '100%' }} />
+              <div ref={mapContainerNavRef} style={{ position: 'absolute', inset: 0, zIndex: 0, width: '100%', height: '100%', top: 0, left: 0 }} />
               <div style={{ position: 'absolute', inset: 0, zIndex: 1000, display: 'flex', flexDirection: 'column', alignItems: 'flex-start', justifyContent: 'flex-start', paddingTop: 24, paddingLeft: 24, pointerEvents: 'none' }}>
                   <button onClick={() => setViewMode('map')} style={{ pointerEvents: 'auto', width: 60, height: 60, borderRadius: '20px', backgroundColor: '#a78bfa', color: 'white', border: '3px solid white', boxShadow: '0 8px 20px rgba(167, 139, 250, 0.3)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', transition: 'all 0.3s ease', fontSize: 28, fontWeight: 'bold' }} onMouseEnter={(e) => { e.currentTarget.style.transform = 'scale(1.08)'; e.currentTarget.style.boxShadow = '0 12px 28px rgba(167, 139, 250, 0.4)'; }} onMouseLeave={(e) => { e.currentTarget.style.transform = 'scale(1)'; e.currentTarget.style.boxShadow = '0 8px 20px rgba(167, 139, 250, 0.3)'; }}>← </button>
                   {nextInstruction && (
