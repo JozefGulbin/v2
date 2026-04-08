@@ -133,9 +133,6 @@ export default function MapPage() {
   const [nextInstruction, setNextInstruction] = useState<string>('');
 
   const mapRef = useRef<any>(null);
-  const mapContainerRef = useRef<HTMLDivElement>(null);
-  const mapContainerNavRef = useRef<HTMLDivElement>(null);
-  const mapWrapperRef = useRef<HTMLDivElement>(null);
   const routingControlRef = useRef<any>(null);
   const routePolylinesRef = useRef<any[]>([]);
   const mainRoutePolylineRef = useRef<any>(null);
@@ -156,6 +153,7 @@ export default function MapPage() {
   const isRecordingRef = useRef(false);
   const transportModeRef = useRef<TransportMode>('walking');
   const currentRouteRef = useRef<RouteInfo | null>(null);
+  const mapWrapperRef = useRef<HTMLDivElement | null>(null);
 
   const t = translations[language];
 
@@ -185,9 +183,6 @@ export default function MapPage() {
       isNavigatingRef.current = viewMode === 'navigation';
       if (mapRef.current) {
           setTimeout(() => mapRef.current.invalidateSize(), 300);
-      }
-      if (viewMode !== 'navigation' && mapContainerRef.current) {
-          mapContainerRef.current.style.transform = 'translate(-50%, -50%) rotate(0deg)';
       }
       if (viewMode === 'navigation' && soundEnabled) {
         playSound('navigation-start');
@@ -394,13 +389,11 @@ export default function MapPage() {
       }
     } catch (error) {
       console.error('Map initialization error:', error);
-      setNotification({ type: 'error', msg: t.mapFailedToLoad });
     }
   };
 
   const startGpsTracking = () => {
     if (!navigator.geolocation) {
-      setNotification({ type: 'error', msg: t.gpsNotAvailable });
       return;
     }
     const onGeoSuccess = (pos: GeolocationPosition) => {
