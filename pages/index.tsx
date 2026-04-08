@@ -381,11 +381,8 @@ export default function MapPage() {
   useEffect(() => {
     if (viewMode === 'map' || viewMode === 'navigation') {
       if (!mapLoaded) setMapLoaded(true);
-      if (mapRef.current) {
-        setTimeout(() => mapRef.current.invalidateSize(), 100);
-      }
     }
-  }, [viewMode, mapLoaded]);
+  }, [viewMode]);
 
   const startGpsTracking = () => {
     if (!navigator.geolocation) {
