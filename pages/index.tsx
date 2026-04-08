@@ -335,15 +335,14 @@ export default function MapPage() {
         return;
       }
       const L = (window as any).L;
+      
+      const container = viewMode === 'navigation' ? mapContainerNavRef.current : mapContainerRef.current;
+      if (!container) return;
+      
       if (mapRef.current) {
-        if (mapRef.current) {
-          setTimeout(() => mapRef.current.invalidateSize(), 100);
-        }
+        setTimeout(() => mapRef.current.invalidateSize(), 100);
         return;
       }
-
-      const container = mapContainerRef.current;
-      if (!container) return;
 
       try {
         const map = L.map(container, { zoomControl: false, attributionControl: false, preferCanvas: true }).setView([54.6872, 25.2797], 15);
@@ -364,7 +363,6 @@ export default function MapPage() {
             else { 
               if (!mainDestination) {
                 setMainDestination({ lat: e.latlng.lat, lng: e.latlng.lng });
-                setNotification({ type: 'info', msg: t.mainDestinationSet });
               }
             }
         };
@@ -378,7 +376,7 @@ export default function MapPage() {
       }
     };
     setTimeout(initMap, 300);
-  }, [mapLoaded]);
+  }, [mapLoaded, viewMode]);
 
   useEffect(() => {
     if (viewMode === 'map' || viewMode === 'navigation') {
@@ -499,7 +497,6 @@ export default function MapPage() {
       mainRoutePolylineRef.current = null;
     }
 
-    // ONLY show blue main route DURING NAVIGATION and ONLY if NO pin segments
     if (mainDestination && userLocationRef.current && viewMode === 'navigation' && pinSegments.length === 0) {
       const coords = `${userLocationRef.current.lng},${userLocationRef.current.lat};${mainDestination.lng},${mainDestination.lat}`;
       const profile = transportModeRef.current === 'walking' ? 'foot' : transportModeRef.current === 'cycling' ? 'bike' : 'car';
@@ -779,7 +776,7 @@ export default function MapPage() {
                   <button onClick={() => setLanguage(language === 'en' ? 'lt' : 'en')} style={{ width: 48, height: 48, borderRadius: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, backgroundColor: '#3b82f6', color: 'white', border: 'none', cursor: 'pointer', fontWeight: 'bold', transition: 'all 0.3s' }}>{language.toUpperCase()}</button>
               </div>
               {weather && (
-                <div style={{ position: 'absolute', top: 32, left: '50%', transform: 'translateX(-50%)', zIndex: 1000, backgroundColor: 'rgba(255,255,255,0.95)', backdropFilter: 'blur(12px)', borderRadius: 20, padding: '8px 16px', boxShadow: '0 4px 12px rgba(0,0,0,0.1)', border: '1px solid rgba(255,255,255,0.5)', display: 'flex', alignItems: 'center', gap: 8 }}>
+                <div style={{ position: 'absolute', top: 32, left: 32, zIndex: 1000, backgroundColor: 'rgba(255,255,255,0.95)', backdropFilter: 'blur(12px)', borderRadius: 20, padding: '8px 16px', boxShadow: '0 4px 12px rgba(0,0,0,0.1)', border: '1px solid rgba(255,255,255,0.5)', display: 'flex', alignItems: 'center', gap: 8 }}>
                   <span style={{ fontSize: 28 }}>{weather.icon}</span>
                   <div style={{ display: 'flex', flexDirection: 'column' }}>
                     <span style={{ fontSize: 11, fontWeight: 'bold', color: '#9ca3af' }}>{t.weather}</span>
@@ -924,12 +921,6 @@ export default function MapPage() {
         {viewMode === 'lost' && (
           <div style={{ position: 'absolute', inset: 0, zIndex: 7000 }}>
               <LostView lat={userLocation?.lat || 0} lng={userLocation?.lng || 0} onClose={() => setViewMode('landing')} />
-          </div>
-        )}
-
-        {notification && viewMode !== 'navigation' && (
-          <div style={{ position: 'absolute', top: 32, right: 120, zIndex: 8000, backgroundColor: '#1f2937', color: 'white', paddingLeft: 28, paddingRight: 28, paddingTop: 14, paddingBottom: 14, borderRadius: 9999, boxShadow: '0 10px 25px -5px rgba(0,0,0,0.2)', fontSize: 14, fontWeight: 'bold', whiteSpace: 'nowrap', border: '2px solid rgba(255,255,255,0.15)', backdropFilter: 'blur(12px)' }}>
-              {notification.msg}
           </div>
         )}
       </div>
