@@ -154,6 +154,7 @@ export default function MapPage() {
   const transportModeRef = useRef<TransportMode>('walking');
   const currentRouteRef = useRef<RouteInfo | null>(null);
   const mapWrapperRef = useRef<HTMLDivElement | null>(null);
+  const mapInitializedRef = useRef(false);
 
   const t = translations[language];
 
@@ -186,6 +187,11 @@ export default function MapPage() {
       }
       if (viewMode === 'navigation' && soundEnabled) {
         playSound('navigation-start');
+      }
+      if ((viewMode === 'map' || viewMode === 'navigation') && mapWrapperRef.current) {
+        mapWrapperRef.current.style.display = 'block';
+      } else if (mapWrapperRef.current) {
+        mapWrapperRef.current.style.display = 'none';
       }
   }, [viewMode]);
 
@@ -322,11 +328,11 @@ export default function MapPage() {
     if (typeof window === 'undefined') return;
     if (!(window as any).L) {
       setTimeout(() => {
-        if ((window as any).L && !mapRef.current) initMap();
+        if ((window as any).L && !mapInitializedRef.current) initMap();
       }, 100);
       return;
     }
-    if (!mapRef.current) {
+    if (!mapInitializedRef.current) {
       initMap();
     }
   }, []);
@@ -334,7 +340,7 @@ export default function MapPage() {
   const initMap = () => {
     if (typeof window === 'undefined') return;
     const L = (window as any).L;
-    if (!L || mapRef.current) return;
+    if (!L || mapInitializedRef.current) return;
 
     const mapWrapper = document.createElement('div');
     mapWrapper.id = 'map-wrapper';
@@ -345,6 +351,7 @@ export default function MapPage() {
     mapWrapper.style.height = '100vh';
     mapWrapper.style.zIndex = '0';
     mapWrapper.style.pointerEvents = 'auto';
+    mapWrapper.style.display = 'none';
     
     document.body.appendChild(mapWrapper);
     mapWrapperRef.current = mapWrapper;
@@ -382,10 +389,10 @@ export default function MapPage() {
       
       map.on('click', handleMapClick);
       mapRef.current = map;
+      mapInitializedRef.current = true;
       
       if (navigator.geolocation) {
         startGpsTracking();
-        map.locate({ setView: true, maxZoom: 15, enableHighAccuracy: true });
       }
     } catch (error) {
       console.error('Map initialization error:', error);
