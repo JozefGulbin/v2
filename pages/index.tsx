@@ -8,7 +8,7 @@ type TransportMode = 'walking' | 'cycling' | 'driving';
 type Language = 'en' | 'lt';
 
 interface SavedRoute {
-  id: string;A
+  id: string;
   date: string;
   distance: number;
   duration: number;
