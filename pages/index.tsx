@@ -182,10 +182,7 @@ export default function MapPage() {
   
   useEffect(() => {
       isNavigatingRef.current = viewMode === 'navigation';
-      if (viewMode === 'map' && mapRef.current) {
-          setTimeout(() => mapRef.current.invalidateSize(), 500);
-      }
-      if (viewMode === 'navigation' && mapRef.current) {
+      if (mapRef.current) {
           setTimeout(() => mapRef.current.invalidateSize(), 500);
       }
       if (viewMode !== 'navigation' && mapContainerRef.current) {
@@ -325,28 +322,34 @@ export default function MapPage() {
     }
   };
 
-  // Initialize map when viewMode changes to map or navigation
-  useEffect(() => {
-    if (viewMode !== 'map' && viewMode !== 'navigation') return;
-    if (!mapRef.current && (mapContainerRef.current || mapContainerNavRef.current)) {
-      initMap();
-    }
-  }, [viewMode]);
-
   const initMap = () => {
     if (typeof window === 'undefined') return;
-    const L = (window as any).L;
-    if (!L) {
+    
+    if (!(window as any).L) {
       setTimeout(initMap, 100);
       return;
     }
 
+    const L = (window as any).L;
     const container = viewMode === 'navigation' ? mapContainerNavRef.current : mapContainerRef.current;
-    if (!container || container.children.length > 0) return;
+    
+    if (!container) return;
+    if (mapRef.current) return;
 
     try {
-      const map = L.map(container, { zoomControl: false, attributionControl: false, preferCanvas: true }).setView([54.6872, 25.2797], 15);
-      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 }).addTo(map);
+      while (container.firstChild) {
+        container.removeChild(container.firstChild);
+      }
+
+      const map = L.map(container, { 
+        zoomControl: false, 
+        attributionControl: false, 
+        preferCanvas: true 
+      }).setView([54.6872, 25.2797], 15);
+      
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { 
+        maxZoom: 19 
+      }).addTo(map);
       
       const handleMapClick = (e: any) => {
           if (isNavigatingRef.current) return;
@@ -370,13 +373,26 @@ export default function MapPage() {
       
       map.on('click', handleMapClick);
       mapRef.current = map;
-      startGpsTracking();
-      map.locate({ setView: true, maxZoom: 15, enableHighAccuracy: true });
+      
+      if (navigator.geolocation) {
+        startGpsTracking();
+        map.locate({ setView: true, maxZoom: 15, enableHighAccuracy: true });
+      }
     } catch (error) {
       console.error('Map initialization error:', error);
       setNotification({ type: 'error', msg: t.mapFailedToLoad });
     }
   };
+
+  useEffect(() => {
+    if (viewMode !== 'map' && viewMode !== 'navigation') return;
+    
+    const timer = setTimeout(() => {
+      initMap();
+    }, 100);
+
+    return () => clearTimeout(timer);
+  }, [viewMode]);
 
   const startGpsTracking = () => {
     if (!navigator.geolocation) {
