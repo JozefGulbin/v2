@@ -5,7 +5,6 @@ import { translations } from "@/utils/translations";
 import { calculateRoutes, getDistanceString, getDurationString, SegmentRoute } from "@/components/RoutingService";
 import { optimizeWaypointOrder, fetchAlternateRoutes, generateTurnByTurnInstructions, RouteOption } from "@/components/RouteOptimizer";
 
-// Placeholder components - we'll create these or import them properly
 const Landing = ({ language, setLanguage, onMapClick, onHistoryClick, onLostClick }: any) => (
   <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: '#10b981', color: 'white' }}>
     <div style={{ textAlign: 'center' }}>
@@ -540,7 +539,6 @@ export default function MapPage() {
 
       {viewMode === 'map' && (
         <>
-          {/* Left sidebar with waypoints */}
           {pinSegments.length > 0 && segmentRoutes.length > 0 && (
             <div style={{ position: 'fixed', left: 24, top: '50%', transform: 'translateY(-50%)', zIndex: 100, backgroundColor: 'rgba(255,255,255,0.95)', backdropFilter: 'blur(12px)', borderRadius: 20, padding: 16, boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1)', maxHeight: '70vh', overflowY: 'auto', pointerEvents: 'auto', minWidth: 240 }}>
               <div style={{ fontSize: 12, fontWeight: 'bold', color: '#6b7280', marginBottom: 12, textTransform: 'uppercase' }}>Waypoints</div>
@@ -569,7 +567,6 @@ export default function MapPage() {
             </div>
           )}
 
-          {/* Route options panel */}
           {alternateRoutes.length > 0 && (
             <div style={{ position: 'fixed', left: 24, bottom: 120, zIndex: 100, backgroundColor: 'rgba(255,255,255,0.95)', backdropFilter: 'blur(12px)', borderRadius: 20, padding: 16, boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1)', pointerEvents: 'auto', minWidth: 200 }}>
               <div style={{ fontSize: 12, fontWeight: 'bold', color: '#6b7280', marginBottom: 12, textTransform: 'uppercase' }}>Routes</div>
@@ -581,7 +578,6 @@ export default function MapPage() {
             </div>
           )}
 
-          {/* Top center bar */}
           <div style={{ position: 'fixed', top: 32, left: '50%', transform: 'translateX(-50%)', zIndex: 100, display: 'flex', justifyContent: 'center', paddingLeft: 24, paddingRight: 24, pointerEvents: 'auto' }}>
             <div style={{ backgroundColor: 'rgba(255,255,255,0.95)', backdropFilter: 'blur(12px)', boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1)', borderRadius: 9999, padding: 10, display: 'flex', alignItems: 'center', border: '1px solid rgba(255,255,255,0.5)' }}>
               <button onClick={() => setViewMode('landing')} style={{ width: 48, height: 48, borderRadius: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 24, backgroundColor: '#f3f4f6', border: 'none', cursor: 'pointer' }}>🏠</button>
@@ -589,14 +585,13 @@ export default function MapPage() {
               <div style={{ display: 'flex', gap: 12 }}>
                 {(['walking', 'cycling', 'driving'] as const).map((m) => (
                   <button key={m} onClick={() => setTransportMode(m)} style={{ width: 48, height: 48, borderRadius: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 24, transition: 'all 0.3s', backgroundColor: transportMode === m ? '#16a34a' : 'transparent', color: transportMode === m ? 'white' : '#d1d5db', border: 'none', cursor: 'pointer', transform: transportMode === m ? 'scale(1.1)' : 'scale(1)' }}>
-                    {m === 'walking' ? '🚶' : m === 'cycling' ? '🚴' : '🚗'}
+                    {m === 'walking' ? '���' : m === 'cycling' ? '🚴' : '🚗'}
                   </button>
                 ))}
               </div>
             </div>
           </div>
 
-          {/* Top right buttons */}
           <div style={{ position: 'fixed', top: 32, right: 32, zIndex: 100, display: 'flex', gap: 12, pointerEvents: 'auto' }}>
             {(mainDestination || pinSegments.length > 0) && (
               <button onClick={handleReset} style={{ width: 48, height: 48, borderRadius: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20, backgroundColor: '#fca5a5', color: '#dc2626', border: 'none', cursor: 'pointer', transition: 'all 0.3s', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }} title="Reset">
@@ -611,7 +606,6 @@ export default function MapPage() {
             </button>
           </div>
 
-          {/* START button */}
           {mainDestination && (
             <div style={{ position: 'fixed', bottom: 32, left: '50%', transform: 'translateX(-50%)', zIndex: 100, display: 'flex', gap: 16, pointerEvents: 'auto' }}>
               <button onClick={handleStartNavigation} style={{ width: 200, height: 60, backgroundColor: '#10b981', border: '4px solid white', borderRadius: 30, color: 'white', fontSize: 20, fontWeight: 'bold', cursor: 'pointer', boxShadow: '0 20px 25px -5px rgba(0,0,0,0.2)', transition: 'all 0.3s', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }} onMouseEnter={(e) => { e.currentTarget.style.transform = 'scale(1.05)'; e.currentTarget.style.boxShadow = '0 25px 35px -5px rgba(0,0,0,0.3)'; }} onMouseLeave={(e) => { e.currentTarget.style.transform = 'scale(1)'; e.currentTarget.style.boxShadow = '0 20px 25px -5px rgba(0,0,0,0.2)'; }}>
@@ -620,7 +614,6 @@ export default function MapPage() {
             </div>
           )}
 
-          {/* Right side buttons */}
           <div style={{ position: 'fixed', top: 128, right: 32, zIndex: 100, display: 'flex', flexDirection: 'column', gap: 24, pointerEvents: 'auto' }}>
             <button onClick={handleToggleRecording} style={{ width: 64, height: 64, borderRadius: 32, boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', transition: 'all 0.3s', border: `4px solid ${isRecording ? '#fca5a5' : 'white'}`, backgroundColor: isRecording ? '#dc2626' : 'white', color: isRecording ? 'white' : '#dc2626', cursor: 'pointer' }}>
               <div style={{ width: 16, height: 16, borderRadius: '50%', backgroundColor: isRecording ? 'white' : '#dc2626' }} />
