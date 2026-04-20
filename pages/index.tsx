@@ -1,12 +1,32 @@
 import React, { useState, useEffect, useRef } from "react";
 import Head from 'next/head';
-import Landing from "@/components/Landing";
-import History from "@/components/History";
-import LostView from "@/components/LostView";
-import { ViewMode, TransportMode, Language, SavedRoute, RouteInfo, PinSegment, WeatherData } from "@/types";
+import { ViewMode, TransportMode, Language, SavedRoute, PinSegment } from "@/types";
 import { translations } from "@/utils/translations";
 import { calculateRoutes, getDistanceString, getDurationString, SegmentRoute } from "@/components/RoutingService";
 import { optimizeWaypointOrder, fetchAlternateRoutes, generateTurnByTurnInstructions, RouteOption } from "@/components/RouteOptimizer";
+
+// Placeholder components - we'll create these or import them properly
+const Landing = ({ language, setLanguage, onMapClick, onHistoryClick, onLostClick }: any) => (
+  <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: '#10b981', color: 'white' }}>
+    <div style={{ textAlign: 'center' }}>
+      <h1>TapuTapu v12.3</h1>
+      <button onClick={onMapClick} style={{ padding: '10px 20px', margin: '10px', backgroundColor: '#3b82f6', border: 'none', color: 'white', borderRadius: '8px', cursor: 'pointer' }}>Map</button>
+      <button onClick={onHistoryClick} style={{ padding: '10px 20px', margin: '10px', backgroundColor: '#3b82f6', border: 'none', color: 'white', borderRadius: '8px', cursor: 'pointer' }}>History</button>
+    </div>
+  </div>
+);
+
+const History = ({ onBackClick }: any) => (
+  <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: '#f3f4f6' }}>
+    <button onClick={onBackClick} style={{ padding: '10px 20px', backgroundColor: '#10b981', border: 'none', color: 'white', borderRadius: '8px', cursor: 'pointer' }}>Back</button>
+  </div>
+);
+
+const LostView = ({ lat, lng, onClose }: any) => (
+  <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: '#f3f4f6' }}>
+    <button onClick={onClose} style={{ padding: '10px 20px', backgroundColor: '#10b981', border: 'none', color: 'white', borderRadius: '8px', cursor: 'pointer' }}>Back</button>
+  </div>
+);
 
 export default function MapPage() {
   const [viewMode, setViewMode] = useState<ViewMode>('landing');
@@ -37,7 +57,6 @@ export default function MapPage() {
   const [nextInstruction, setNextInstruction] = useState('');
   const [navStats, setNavStats] = useState({ speed: 0, distanceRem: 0, timeRem: 0, pace: '--:--', calories: 0 });
   
-  const [weather, setWeather] = useState<WeatherData | null>(null);
   const [savedRoutes, setSavedRoutes] = useState<SavedRoute[]>([]);
   
   const mapRef = useRef<any>(null);
@@ -79,21 +98,10 @@ export default function MapPage() {
     localStorage.setItem('taputapu_language', language);
   }, [language]);
 
-  useEffect(() => { 
-    isRecordingRef.current = isRecording; 
-  }, [isRecording]);
-
-  useEffect(() => { 
-    isBuilderModeRef.current = isBuilderMode; 
-  }, [isBuilderMode]);
-
-  useEffect(() => { 
-    transportModeRef.current = transportMode; 
-  }, [transportMode]);
-
-  useEffect(() => { 
-    isNavigatingRef.current = viewMode === 'navigation'; 
-  }, [viewMode]);
+  useEffect(() => { isRecordingRef.current = isRecording; }, [isRecording]);
+  useEffect(() => { isBuilderModeRef.current = isBuilderMode; }, [isBuilderMode]);
+  useEffect(() => { transportModeRef.current = transportMode; }, [transportMode]);
+  useEffect(() => { isNavigatingRef.current = viewMode === 'navigation'; }, [viewMode]);
 
   useEffect(() => {
     if (userLocation) {
