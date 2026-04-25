@@ -3,18 +3,34 @@ import Head from 'next/head';
 import LostView from "@/components/LostView";
 import ElderlyKidFriendlyNav from "@/components/ElderlyKidFriendlyNav";
 
-type ViewMode = 'landing' | 'map' | 'lost' | 'navigation' | 'history';
+type ViewMode = 'landing' | 'map' | 'lost' | 'navigation' | 'history' | 'photos';
 type TransportMode = 'walking' | 'cycling' | 'driving';
 type Language = 'en' | 'lt';
 
 interface SavedRoute {
   id: string;
+  startedAt?: string; // ISO
+  endedAt?: string;   // ISO
   date: string;
-  distance: number;
-  duration: number;
+  distance: number; // meters
+  duration: number; // seconds
   pace: string;
   calories: number;
   path: { lat: number, lng: number }[];
+}
+
+interface PhotoPin {
+  id: string;
+  createdAt: string; // ISO
+  title?: string;
+  lat: number;
+  lng: number;
+
+  // simple fast ship: base64 data url
+  dataUrl: string;
+
+  // optional link to trail id in future
+  trailId?: string;
 }
 
 interface RouteInfo {
@@ -61,21 +77,39 @@ const translations = {
     mainDestinationSet: 'Main destination set! Click PIN+ to add stops.',
     mapFailedToLoad: 'Map failed to load',
     gpsNotAvailable: 'GPS not available',
-    routeSaved: 'Route saved!',
-    recordingStarted: 'Recording started 🔴',
-    gpxSaved: 'GPX saved!',
+
+    // trails / recording
+    routeSaved: 'Trail saved!',
+    recordingStarted: 'Trail recording started',
+    recordingStopped: 'Trail recording stopped',
+    delete: 'Delete',
+    deleted: 'Deleted',
+    duration: 'Duration',
+    trailsBtn: 'Trails',
+    trailsOn: 'ON',
+
     noTrailsYet: 'No trails yet...',
     myTrails: 'My Trails',
-    loading: 'Loading route',
+    loading: 'Loading trail',
     nextTurn: 'Next turn in',
     meters: 'meters',
-    straightAhead: 'Go straight',
-    turnLeft: 'Turn left',
-    turnRight: 'Turn right',
-    uturn: 'Make a U-turn',
     arrived: 'You have arrived',
     weather: 'Weather',
     temp: '°C',
+    searchPlaceholder: 'Search destination…',
+    searchGo: 'Go',
+    tooShortNotSaved: 'Too short — not saved',
+    destinationSet: 'Destination set',
+
+    // photos
+    photos: 'Photos',
+    noPhotosYet: 'No photos yet...',
+    addPhoto: 'Add photo',
+    photoSaved: 'Photo saved!',
+    photoDeleted: 'Photo deleted',
+    photoNeedsGps: 'GPS not ready yet — please wait',
+    photoTooLarge: 'Photo too large (try another or smaller)',
+    photoPinTitle: 'Photo pin',
   },
   lt: {
     eikime: 'Eikime!',
@@ -90,21 +124,39 @@ const translations = {
     mainDestinationSet: 'Nustatytas pagrindinis tikslas! Norėdami pridėti sustojimą, spustelėkite PIN+.',
     mapFailedToLoad: 'Žemėlapis nepavyko įkelti',
     gpsNotAvailable: 'GPS nepasiekiamas',
-    routeSaved: 'Maršrutas išsaugotas!',
-    recordingStarted: 'Įrašymas pradėtas 🔴',
-    gpxSaved: 'GPX išsaugotas!',
+
+    // trails / recording
+    routeSaved: 'Šliaužos išsaugotos!',
+    recordingStarted: 'Šliaužų įrašymas pradėtas',
+    recordingStopped: 'Šliaužų įrašymas sustabdytas',
+    delete: 'Ištrinti',
+    deleted: 'Ištrinta',
+    duration: 'Trukmė',
+    trailsBtn: 'Šliaužos',
+    trailsOn: 'ON',
+
     noTrailsYet: 'Dar nėra šliaužų...',
     myTrails: 'Mano šliaužos',
-    loading: 'Kraunamas maršrutas',
+    loading: 'Kraunamos šliaužos',
     nextTurn: 'Kitas posūkis per',
     meters: 'metrų',
-    straightAhead: 'Eikite tiesiai',
-    turnLeft: 'Susukit į kairę',
-    turnRight: 'Susukit į dešinę',
-    uturn: 'Pasukit atgal',
     arrived: 'Jūs atvykote',
     weather: 'Oras',
     temp: '°C',
+    searchPlaceholder: 'Ieškoti tikslo…',
+    searchGo: 'GO',
+    tooShortNotSaved: 'Per trumpa — neišsaugota',
+    destinationSet: 'Tikslas nustatytas',
+
+    // photos
+    photos: 'Nuotraukos',
+    noPhotosYet: 'Dar nėra nuotraukų...',
+    addPhoto: 'Įkelti nuotrauką',
+    photoSaved: 'Nuotrauka išsaugota!',
+    photoDeleted: 'Nuotrauka ištrinta',
+    photoNeedsGps: 'GPS dar neparuoštas — palaukite',
+    photoTooLarge: 'Nuotrauka per didelė (rinkitės mažesnę)',
+    photoPinTitle: 'Nuotraukos taškas',
   }
 };
 
@@ -121,17 +173,33 @@ export default function MapPage() {
   const [navStats, setNavStats] = useState({ speed: 0, distanceRem: 0, timeRem: 0, pace: '--:--', calories: 0 });
   const [showRouteSelector, setShowRouteSelector] = useState(false);
   const [notification, setNotification] = useState<{ type: 'error' | 'info', msg: string } | null>(null);
+
+  // trails
   const [savedRoutes, setSavedRoutes] = useState<SavedRoute[]>([]);
   const [isRecording, setIsRecording] = useState(false);
   const [recordedPath, setRecordedPath] = useState<{ lat: number, lng: number }[]>([]);
   const [totalRecordedDist, setTotalRecordedDist] = useState(0);
   const [recordingStartTime, setRecordingStartTime] = useState<number | null>(null);
+
+  // photos
+  const [photoPins, setPhotoPins] = useState<PhotoPin[]>([]);
+  const photoInputRef = useRef<HTMLInputElement>(null);
+
   const [mapLoaded, setMapLoaded] = useState(false);
   const [highlightedSegmentIndex, setHighlightedSegmentIndex] = useState<number | null>(null);
   const [soundEnabled, setSoundEnabled] = useState(true);
   const [language, setLanguage] = useState<Language>('en');
   const [weather, setWeather] = useState<WeatherData | null>(null);
   const [nextInstruction, setNextInstruction] = useState<string>('');
+
+  // Mobile + UI state
+  const [isMobile, setIsMobile] = useState(false);
+  const [pitstopsCollapsed, setPitstopsCollapsed] = useState(true);
+
+  // Search state
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchLoading, setSearchLoading] = useState(false);
+  const [searchResults, setSearchResults] = useState<any[]>([]);
 
   const mapRef = useRef<any>(null);
   const mapContainerRef = useRef<HTMLDivElement>(null);
@@ -149,6 +217,13 @@ export default function MapPage() {
   const isBuilderModeRef = useRef(false);
   const lastAnnounceDistRef = useRef<number>(0);
 
+  // Photo markers on map
+  const photoMarkerLayersRef = useRef<any[]>([]);
+
+  // Rotation throttle (Safari-friendly)
+  const lastRotateAtRef = useRef(0);
+  const lastHeadingRef = useRef<number | null>(null);
+
   const userLocationRef = useRef<{ lat: number; lng: number, heading: number | null } | null>(null);
   const isNavigatingRef = useRef(false);
   const destinationRef = useRef<{ lat: number; lng: number } | null>(null);
@@ -158,9 +233,32 @@ export default function MapPage() {
 
   const t = translations[language];
 
+  // ---------- load persisted ----------
   useEffect(() => {
-    const localData = localStorage.getItem('taputapu_saved_routes');
-    if (localData) setSavedRoutes(JSON.parse(localData));
+    if (typeof window === 'undefined') return;
+    const check = () => setIsMobile(window.innerWidth <= 480);
+    check();
+    window.addEventListener('resize', check);
+    return () => window.removeEventListener('resize', check);
+  }, []);
+
+  useEffect(() => {
+    const localTrails = localStorage.getItem('taputapu_saved_routes');
+    if (localTrails) {
+      try {
+        const parsed = JSON.parse(localTrails);
+        if (Array.isArray(parsed)) setSavedRoutes(parsed);
+      } catch { }
+    }
+
+    const localPhotos = localStorage.getItem('taputapu_photo_pins');
+    if (localPhotos) {
+      try {
+        const parsed = JSON.parse(localPhotos);
+        if (Array.isArray(parsed)) setPhotoPins(parsed);
+      } catch { }
+    }
+
     const savedLang = localStorage.getItem('taputapu_language') as Language;
     if (savedLang) setLanguage(savedLang);
   }, []);
@@ -187,17 +285,78 @@ export default function MapPage() {
     if (viewMode !== 'navigation' && mapContainerRef.current) {
       mapContainerRef.current.style.transform = 'translate(-50%, -50%) rotate(0deg)';
     }
-    if (viewMode === 'navigation' && soundEnabled) {
-      playSound('navigation-start');
-    }
 
+    // Only invalidate on mode changes (not every GPS tick)
     if (mapRef.current) {
       requestAnimationFrame(() => mapRef.current.invalidateSize());
       setTimeout(() => mapRef.current?.invalidateSize(), 250);
       setTimeout(() => mapRef.current?.invalidateSize(), 750);
     }
-  }, [viewMode, soundEnabled]);
+  }, [viewMode]);
 
+  // Keep pitstops collapsed by default on mobile
+  useEffect(() => {
+    if (isMobile) setPitstopsCollapsed(true);
+  }, [isMobile]);
+
+  // ---------- utils ----------
+  const getDistanceFromLatLonInM = (lat1: number, lon1: number, lat2: number, lon2: number) => {
+    const R = 6371000;
+    const dLat = (lat2 - lat1) * (Math.PI / 180);
+    const dLon = (lon2 - lon1) * (Math.PI / 180);
+    const a = Math.sin(dLat / 2) * Math.sin(dLat / 2)
+      + Math.cos(lat1 * (Math.PI / 180)) * Math.cos(lat2 * (Math.PI / 180))
+      * Math.sin(dLon / 2) * Math.sin(dLon / 2);
+    return R * (2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)));
+  };
+
+  const calculatePace = (speed: number | null) => {
+    if (!speed || speed < 0.3) return '--:--';
+    const minPerKm = 1000 / (speed * 60);
+    const mins = Math.floor(minPerKm);
+    const secs = Math.round((minPerKm - mins) * 60);
+    return `${mins}:${secs.toString().padStart(2, '0')}`;
+  };
+
+  const formatTime = (s: number) => {
+    const h = Math.floor(s / 3600);
+    const m = Math.round((s % 3600) / 60);
+    return h > 0 ? `${h} v ${m} m` : `${m} min`;
+  };
+
+  const formatDist = (meters: number) => meters >= 1000 ? `${(meters / 1000).toFixed(2)} km` : `${Math.round(meters)} m`;
+
+  const formatTrailDate = (route: SavedRoute) => {
+    const iso = route.startedAt || route.endedAt;
+    if (iso) {
+      const d = new Date(iso);
+      return d.toLocaleString(language === 'lt' ? 'lt-LT' : 'en-GB', {
+        year: 'numeric', month: '2-digit', day: '2-digit',
+        hour: '2-digit', minute: '2-digit'
+      });
+    }
+    return route.date;
+  };
+
+  const formatPhotoDate = (p: PhotoPin) => {
+    const d = new Date(p.createdAt);
+    return d.toLocaleString(language === 'lt' ? 'lt-LT' : 'en-GB', {
+      year: 'numeric', month: '2-digit', day: '2-digit',
+      hour: '2-digit', minute: '2-digit'
+    });
+  };
+
+  const safePersistPhotos = (pins: PhotoPin[]) => {
+    setPhotoPins(pins);
+    try {
+      localStorage.setItem('taputapu_photo_pins', JSON.stringify(pins));
+    } catch (e) {
+      console.error('photo persist error', e);
+      setNotification({ type: 'error', msg: t.photoTooLarge });
+    }
+  };
+
+  // ---------- weather ----------
   const fetchWeather = async (lat: number, lon: number) => {
     try {
       const response = await fetch(
@@ -226,23 +385,7 @@ export default function MapPage() {
     }
   };
 
-  const getInstructionIcon = (instruction: string) => {
-    if (!instruction) return '➡️';
-    const lower = instruction.toLowerCase();
-    if (lower.includes('left')) return '↙️';
-    if (lower.includes('right')) return '↘️';
-    if (lower.includes('straight') || lower.includes('continue')) return '⬇️';
-    if (lower.includes('uturn') || lower.includes('u-turn')) return '🔄';
-    return '➡️';
-  };
-
-  const getNextTurnInstruction = (route: RouteInfo) => {
-    if (!route || !route.instructions || route.instructions.length === 0) return '';
-    const nextInst = route.instructions[0];
-    if (!nextInst) return '';
-    return `${getInstructionIcon(nextInst.text)} ${nextInst.text} - ${Math.round(nextInst.distance)}m`;
-  };
-
+  // ---------- navigation speech / sounds ----------
   const speak = (text: string) => {
     if (!soundEnabled || typeof window === 'undefined') return;
     window.speechSynthesis?.cancel();
@@ -327,6 +470,43 @@ export default function MapPage() {
     }
   };
 
+  const getInstructionIcon = (instruction: string) => {
+    if (!instruction) return '➡️';
+    const lower = instruction.toLowerCase();
+    if (lower.includes('left')) return '↙️';
+    if (lower.includes('right')) return '↘️';
+    if (lower.includes('straight') || lower.includes('continue')) return '⬇️';
+    if (lower.includes('uturn') || lower.includes('u-turn')) return '🔄';
+    return '➡️';
+  };
+
+  const getNextTurnInstruction = (route: RouteInfo) => {
+    if (!route || !route.instructions || route.instructions.length === 0) return '';
+    const nextInst = route.instructions[0];
+    if (!nextInst) return '';
+    return `${getInstructionIcon(nextInst.text)} ${nextInst.text} - ${Math.round(nextInst.distance)}m`;
+  };
+
+  // ---------- search ----------
+  const searchAddress = async () => {
+    const q = searchQuery.trim();
+    if (!q) return;
+
+    setSearchLoading(true);
+    try {
+      const url = `https://nominatim.openstreetmap.org/search?format=json&limit=5&q=${encodeURIComponent(q)}`;
+      const res = await fetch(url, { headers: { Accept: 'application/json' } });
+      const data = await res.json();
+      setSearchResults(Array.isArray(data) ? data : []);
+    } catch (e) {
+      console.error('Search error', e);
+      setSearchResults([]);
+    } finally {
+      setSearchLoading(false);
+    }
+  };
+
+  // ---------- map init ----------
   useEffect(() => {
     if (!mapLoaded) return;
 
@@ -354,6 +534,7 @@ export default function MapPage() {
         const handleMapClick = (e: any) => {
           if (isNavigatingRef.current) return;
           if (highlightLayerRef.current) highlightLayerRef.current.remove();
+
           if (isBuilderModeRef.current) {
             setPinSegments(prev => {
               const newPin: PinSegment = {
@@ -396,6 +577,7 @@ export default function MapPage() {
     }
   }, [viewMode, mapLoaded]);
 
+  // ---------- gps ----------
   const startGpsTracking = () => {
     if (!navigator.geolocation) {
       setNotification({ type: 'error', msg: t.gpsNotAvailable });
@@ -411,18 +593,38 @@ export default function MapPage() {
       if (isRecordingRef.current) {
         setRecordedPath(prev => {
           const last = prev[prev.length - 1];
-          if (!last || getDistanceFromLatLonInM(latitude, longitude, last.lat, last.lng) > 3) {
-            if (last) setTotalRecordedDist(d => d + getDistanceFromLatLonInM(latitude, longitude, last.lat, last.lng));
+
+          // record even small movements (better for slow walking)
+          const thresholdM = 1.5;
+
+          if (!last) {
+            return [{ lat: latitude, lng: longitude }];
+          }
+
+          const delta = getDistanceFromLatLonInM(latitude, longitude, last.lat, last.lng);
+          if (delta > thresholdM) {
+            setTotalRecordedDist(d => d + delta);
             return [...prev, { lat: latitude, lng: longitude }];
           }
+
           return prev;
         });
       }
 
       if (isNavigatingRef.current && mapRef.current) {
         if (heading !== null && mapContainerRef.current) {
-          mapContainerRef.current.style.transform = `translate(-50%, -50%) rotate(${-heading}deg)`;
-          mapContainerRef.current.style.transition = 'transform 1.0s cubic-bezier(0.4, 0, 0.2, 1)';
+          const now = Date.now();
+          const prevHeading = lastHeadingRef.current;
+
+          const changedEnough = prevHeading === null ? true : Math.abs(prevHeading - heading) > 10;
+          const timeOk = now - lastRotateAtRef.current > 700;
+
+          if (changedEnough && timeOk) {
+            mapContainerRef.current.style.transform = `translate(-50%, -50%) rotate(${-heading}deg)`;
+            mapContainerRef.current.style.transition = 'transform 0.7s ease-out';
+            lastRotateAtRef.current = now;
+            lastHeadingRef.current = heading;
+          }
         }
 
         mapRef.current.setView([latitude, longitude], 18, { animate: true });
@@ -431,9 +633,7 @@ export default function MapPage() {
           ? getDistanceFromLatLonInM(latitude, longitude, destinationRef.current.lat, destinationRef.current.lng)
           : 0;
 
-        if (currentRouteRef.current) {
-          setNextInstruction(getNextTurnInstruction(currentRouteRef.current));
-        }
+        if (currentRouteRef.current) setNextInstruction(getNextTurnInstruction(currentRouteRef.current));
 
         if (soundEnabled) {
           if (distRem < 50 && lastAnnounceDistRef.current > 50) {
@@ -458,8 +658,6 @@ export default function MapPage() {
           pace: calculatePace(speed),
           calories: Math.round((totalRecordedDist / 1000) * 65)
         });
-
-        mapRef.current.invalidateSize();
       }
     };
 
@@ -503,6 +701,7 @@ export default function MapPage() {
     else accuracyCircleRef.current = L.circle([loc.lat, loc.lng], { radius: loc.accuracy, color: '#16a34a', fillOpacity: 0.05, weight: 0 }).addTo(mapRef.current);
   };
 
+  // ---------- destination marker ----------
   useEffect(() => {
     const L = (window as any).L;
     if (!mapRef.current || !L) return;
@@ -526,6 +725,50 @@ export default function MapPage() {
     }
   }, [mainDestination]);
 
+  // ---------- photo markers on map (both map + navigation) ----------
+  useEffect(() => {
+    const L = (window as any).L;
+    if (!mapRef.current || !L) return;
+    if (!(viewMode === 'map' || viewMode === 'navigation')) return;
+
+    // clear existing
+    photoMarkerLayersRef.current.forEach(m => m.remove());
+    photoMarkerLayersRef.current = [];
+
+    // add markers
+    photoPins.forEach((p) => {
+      const icon = L.divIcon({
+        className: 'bg-transparent',
+        html: `<div style="
+              width: 36px; height: 36px;
+              background: white;
+              border: 3px solid #f59e0b;
+              border-radius: 9999px;
+              display:flex; align-items:center; justify-content:center;
+              box-shadow: 0 12px 22px rgba(0,0,0,0.14);
+              font-size: 18px;
+            ">📷</div>`,
+        iconSize: [36, 36],
+        iconAnchor: [18, 18]
+      });
+
+      const marker = L.marker([p.lat, p.lng], { icon, zIndexOffset: 600 }).addTo(mapRef.current);
+      marker.bindPopup(`
+        <div style="max-width: 220px;">
+          <div style="font-weight: 800; margin-bottom: 6px;">${t.photoPinTitle}</div>
+          <div style="font-size: 11px; color: #6b7280; margin-bottom: 8px;">
+            ${new Date(p.createdAt).toLocaleString()}
+          </div>
+          <img src="${p.dataUrl}" style="width: 100%; border-radius: 12px; border: 1px solid #e5e7eb;" />
+        </div>
+      `);
+
+      photoMarkerLayersRef.current.push(marker);
+    });
+
+  }, [photoPins, viewMode, language]);
+
+  // ---------- main route during navigation (thin) ----------
   useEffect(() => {
     const L = (window as any).L;
     if (!mapRef.current || !L) return;
@@ -535,7 +778,6 @@ export default function MapPage() {
       mainRoutePolylineRef.current = null;
     }
 
-    // blue main route DURING NAVIGATION and ONLY if NO pin segments
     if (mainDestination && userLocationRef.current && viewMode === 'navigation' && pinSegments.length === 0) {
       const coords = `${userLocationRef.current.lng},${userLocationRef.current.lat};${mainDestination.lng},${mainDestination.lat}`;
       const profile = transportModeRef.current === 'walking' ? 'foot' : transportModeRef.current === 'cycling' ? 'bike' : 'car';
@@ -560,6 +802,7 @@ export default function MapPage() {
     }
   }, [mainDestination, transportMode, viewMode, pinSegments]);
 
+  // ---------- segment routes ----------
   const fetchSegmentRoute = async (from: { lat: number; lng: number }, to: PinSegment, fromLetter: string, toIndex: number) => {
     const coords = `${from.lng},${from.lat};${to.lng},${to.lat}`;
     const profile = transportModeRef.current === 'walking' ? 'foot' : transportModeRef.current === 'cycling' ? 'bike' : 'car';
@@ -609,6 +852,8 @@ export default function MapPage() {
       return;
     }
     const L = (window as any).L;
+    if (!L) return;
+
     segmentPolylinesRef.current.forEach(l => l.remove());
     segmentPolylinesRef.current = [];
 
@@ -635,6 +880,8 @@ export default function MapPage() {
   useEffect(() => {
     if (!mapRef.current || !isBuilderMode) return;
     const L = (window as any).L;
+    if (!L) return;
+
     pinMarkerLayersRef.current.forEach(m => m.remove());
     pinMarkerLayersRef.current = [];
 
@@ -661,14 +908,13 @@ export default function MapPage() {
     setHighlightedSegmentIndex(null);
   };
 
+  // ---------- routing (transparent lines; we draw our own) ----------
   useEffect(() => {
     if (!mapRef.current) return;
     const L = (window as any).L;
     if (!L) return;
 
     if (routingControlRef.current) mapRef.current.removeControl(routingControlRef.current);
-    markerLayersRef.current.forEach(m => m.remove());
-    markerLayersRef.current = [];
 
     if (!mainDestination || !userLocationRef.current) { setRoutes([]); return; }
 
@@ -743,51 +989,40 @@ export default function MapPage() {
     });
   }, [routes, selectedRouteIndex, viewMode]);
 
-  const getDistanceFromLatLonInM = (lat1: number, lon1: number, lat2: number, lon2: number) => {
-    const R = 6371000;
-    const dLat = (lat2 - lat1) * (Math.PI / 180);
-    const dLon = (lon2 - lon1) * (Math.PI / 180);
-    const a = Math.sin(dLat / 2) * Math.sin(dLat / 2)
-      + Math.cos(lat1 * (Math.PI / 180)) * Math.cos(lat2 * (Math.PI / 180))
-      * Math.sin(dLon / 2) * Math.sin(dLon / 2);
-    return R * (2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)));
-  };
-
-  const calculatePace = (speed: number | null) => {
-    if (!speed || speed < 0.3) return '--:--';
-    const minPerKm = 1000 / (speed * 60);
-    const mins = Math.floor(minPerKm);
-    const secs = Math.round((minPerKm - mins) * 60);
-    return `${mins}:${secs.toString().padStart(2, '0')}`;
-  };
-
-  const formatTime = (s: number) => {
-    const h = Math.floor(s / 3600);
-    const m = Math.round((s % 3600) / 60);
-    return h > 0 ? `${h} v ${m} m` : `${m} min`;
-  };
-
-  const formatDist = (meters: number) => meters >= 1000 ? `${(meters / 1000).toFixed(1)} km` : `${Math.round(meters)} m`;
-
+  // ---------- trails recording ----------
   const toggleRecording = () => {
     if (isRecording) {
       setIsRecording(false);
-      const durationMs = Date.now() - (recordingStartTime || Date.now());
+
+      const started = recordingStartTime || Date.now();
+      const ended = Date.now();
+      const durationMs = ended - started;
+
+      if (recordedPath.length < 2 || totalRecordedDist < 5) {
+        setNotification({ type: 'info', msg: t.tooShortNotSaved });
+        return;
+      }
+
+      const durationSec = Math.max(1, Math.floor(durationMs / 1000));
+
       const newSavedRoute: SavedRoute = {
         id: Date.now().toString(),
-        date: new Date().toLocaleDateString('lt-LT'),
+        startedAt: new Date(started).toISOString(),
+        endedAt: new Date(ended).toISOString(),
+        date: new Date(started).toLocaleDateString('lt-LT'),
         distance: totalRecordedDist,
-        duration: Math.floor(durationMs / 1000),
-        pace: calculatePace(totalRecordedDist / (durationMs / 1000)),
+        duration: durationSec,
+        pace: calculatePace(totalRecordedDist / durationSec),
         calories: Math.round((totalRecordedDist / 1000) * 65),
         path: recordedPath
       };
+
       const updated = [newSavedRoute, ...savedRoutes];
       setSavedRoutes(updated);
       localStorage.setItem('taputapu_saved_routes', JSON.stringify(updated));
       setNotification({ type: 'info', msg: t.routeSaved });
     } else {
-      setRecordedPath([]);
+      setRecordedPath(userLocation ? [{ lat: userLocation.lat, lng: userLocation.lng }] : []);
       setTotalRecordedDist(0);
       setRecordingStartTime(Date.now());
       setIsRecording(true);
@@ -795,20 +1030,168 @@ export default function MapPage() {
     }
   };
 
-  const loadSavedRoute = (route: SavedRoute) => {
-    setViewMode('map');
-    setTimeout(() => {
-      if (!mapRef.current) return;
-      const L = (window as any).L;
-      if (!L) return;
+  const deleteSavedRoute = (id: string) => {
+    const updated = savedRoutes.filter(r => r.id !== id);
+    setSavedRoutes(updated);
+    localStorage.setItem('taputapu_saved_routes', JSON.stringify(updated));
+    setNotification({ type: 'info', msg: t.deleted });
+  };
 
-      if (highlightLayerRef.current) highlightLayerRef.current.remove();
-      const poly = L.polyline(route.path, { color: '#a2e1c8', weight: 6, opacity: 0.75, lineCap: 'round', dashArray: '5, 10' }).addTo(mapRef.current);
-      highlightLayerRef.current = poly;
+  // ---------- robust map readiness (fix blank tiles) ----------
+  const ensureMapReady = async (timeoutMs = 3500) => {
+    const start = Date.now();
+    while (Date.now() - start < timeoutMs) {
+      if (mapRef.current && (window as any).L) return true;
+      await new Promise(r => setTimeout(r, 50));
+    }
+    return false;
+  };
+
+  const forceMapRepaint = () => {
+    if (!mapRef.current) return;
+    requestAnimationFrame(() => mapRef.current?.invalidateSize());
+    setTimeout(() => mapRef.current?.invalidateSize(), 250);
+    setTimeout(() => mapRef.current?.invalidateSize(), 650);
+    setTimeout(() => mapRef.current?.invalidateSize(), 1200);
+
+    // extra robustness: force setView to current center/zoom after invalidation
+    setTimeout(() => {
+      try {
+        if (!mapRef.current) return;
+        mapRef.current.setView(mapRef.current.getCenter(), mapRef.current.getZoom(), { animate: false });
+      } catch { }
+    }, 700);
+  };
+
+  const loadSavedRoute = async (route: SavedRoute) => {
+    setViewMode('map');
+    if (!mapLoaded) setMapLoaded(true);
+
+    const ok = await ensureMapReady(3500);
+    if (!ok) {
+      setNotification({ type: 'error', msg: 'Map not ready yet' });
+      return;
+    }
+
+    await new Promise(r => setTimeout(r, 150));
+    forceMapRepaint();
+
+    if (!mapRef.current) return;
+    const L = (window as any).L;
+    if (!L) return;
+
+    if (!route.path || route.path.length < 2) {
+      setNotification({ type: 'info', msg: `${t.loading}: ${formatTrailDate(route)} (too short)` });
+      return;
+    }
+
+    if (highlightLayerRef.current) highlightLayerRef.current.remove();
+
+    const poly = L.polyline(route.path, {
+      color: '#10b981',
+      weight: 6,
+      opacity: 0.75,
+      lineCap: 'round'
+    }).addTo(mapRef.current);
+
+    highlightLayerRef.current = poly;
+
+    try {
       mapRef.current.fitBounds(poly.getBounds(), { padding: [50, 50] });
-      setNotification({ type: 'info', msg: `${t.loading} (${route.date})` });
+    } catch (e) {
+      console.error('fitBounds error', e);
+    }
+
+    setNotification({ type: 'info', msg: `${t.loading}: ${formatTrailDate(route)}` });
+  };
+
+  // ---------- Photos: add / delete / center ----------
+  const openPhotoPicker = () => {
+    if (!userLocationRef.current) {
+      setNotification({ type: 'info', msg: t.photoNeedsGps });
+      return;
+    }
+    photoInputRef.current?.click();
+  };
+
+  const readFileAsDataURL = (file: File) =>
+    new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(String(reader.result || ''));
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
+
+  const onPhotoSelected = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = ''; // allow same file again
+    if (!file) return;
+
+    if (!userLocationRef.current) {
+      setNotification({ type: 'info', msg: t.photoNeedsGps });
+      return;
+    }
+
+    try {
+      // keep it manageable for localStorage: if > ~4-5MB might fail
+      // We still try; if it fails, we show error via safePersistPhotos.
+      const dataUrl = await readFileAsDataURL(file);
+
+      const loc = userLocationRef.current;
+      const pin: PhotoPin = {
+        id: Date.now().toString(),
+        createdAt: new Date().toISOString(),
+        lat: loc.lat,
+        lng: loc.lng,
+        dataUrl
+      };
+
+      const updated = [pin, ...photoPins];
+      safePersistPhotos(updated);
+      setNotification({ type: 'info', msg: t.photoSaved });
+
+      // Show immediately on map if present
+      if (mapRef.current && (viewMode === 'map' || viewMode === 'navigation')) {
+        mapRef.current.setView([pin.lat, pin.lng], Math.max(16, mapRef.current.getZoom()), { animate: true });
+      }
+    } catch (err) {
+      console.error('photo read error', err);
+      setNotification({ type: 'error', msg: t.photoTooLarge });
+    }
+  };
+
+  const deletePhotoPin = (id: string) => {
+    const updated = photoPins.filter(p => p.id !== id);
+    safePersistPhotos(updated);
+    setNotification({ type: 'info', msg: t.photoDeleted });
+  };
+
+  const centerOnPhoto = async (p: PhotoPin) => {
+    setViewMode('map');
+    if (!mapLoaded) setMapLoaded(true);
+
+    const ok = await ensureMapReady(3500);
+    if (!ok) return;
+
+    await new Promise(r => setTimeout(r, 120));
+    forceMapRepaint();
+
+    mapRef.current?.setView([p.lat, p.lng], 17, { animate: true });
+
+    // find marker and open popup (best effort)
+    setTimeout(() => {
+      try {
+        const marker = photoMarkerLayersRef.current.find((m: any) => {
+          const ll = m.getLatLng?.();
+          return ll && Math.abs(ll.lat - p.lat) < 0.000001 && Math.abs(ll.lng - p.lng) < 0.000001;
+        });
+        marker?.openPopup?.();
+      } catch { }
     }, 600);
   };
+
+  const pitstopsHasContent = Boolean(mainDestination);
+  const showPitstopsPanel = isBuilderMode && pitstopsHasContent;
 
   return (
     <>
@@ -818,18 +1201,25 @@ export default function MapPage() {
           * { margin: 0; padding: 0; box-sizing: border-box; }
           html, body { width: 100%; height: 100%; overflow: hidden !important; position: fixed !important; }
           #__next { width: 100%; height: 100%; overflow: hidden !important; }
-          @keyframes flowerpetal { 0% { transform: translateY(-10vh) translateX(0) rotate(0deg); } 100% { transform: translateY(110vh) translateX(20px) rotate(360deg); } }
           @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
           @keyframes float { 0%, 100% { transform: translateY(0px); } 50% { transform: translateY(-20px); } }
-          .flower-petal { position: absolute; color: #ffb6c1; user-select: none; z-index: 9999; pointer-events: none; font-size: 1.8rem; animation: flowerpetal 12s linear infinite; opacity: 0.8; }
-          .no-scrollbar::-webkit-scrollbar { display: none; }
           .forest-animal { position: absolute; user-select: none; pointer-events: none; animation: float 4s ease-in-out infinite; }
         `}</style>
       </Head>
 
       <div style={{ width: '100vw', height: '100vh', margin: 0, padding: 0, overflow: 'hidden', backgroundColor: '#f0fdf4', fontFamily: 'Arial, sans-serif', position: 'fixed', top: 0, left: 0 }}>
 
-        {/* SINGLE MAP CONTAINER (mounted for both map + navigation) */}
+        {/* hidden photo input */}
+        <input
+          ref={photoInputRef}
+          type="file"
+          accept="image/*"
+          capture="environment"
+          style={{ display: 'none' }}
+          onChange={onPhotoSelected}
+        />
+
+        {/* SINGLE MAP CONTAINER */}
         {(viewMode === 'map' || viewMode === 'navigation') && (
           <div
             ref={mapContainerRef}
@@ -838,8 +1228,8 @@ export default function MapPage() {
               top: '50%',
               left: '50%',
               zIndex: 0,
-              width: '400vw',
-              height: '400vh',
+              width: isMobile ? '180vw' : '220vw',
+              height: isMobile ? '180vh' : '220vh',
               transform: 'translate(-50%, -50%) rotate(0deg)',
               transformOrigin: 'center center'
             }}
@@ -853,13 +1243,15 @@ export default function MapPage() {
             <div className="forest-animal" style={{ bottom: '28%', right: '18%', fontSize: '50px', zIndex: 3, animationDelay: '1s' }}>🦉</div>
             <div className="forest-animal" style={{ bottom: '40%', left: '60%', fontSize: '45px', zIndex: 3, animationDelay: '2s' }}>🦊</div>
 
-            <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 40, zIndex: 10 }}>
-              <div style={{ marginBottom: 20, textAlign: 'center' }}>
+            <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 28, zIndex: 10 }}>
+              <div style={{ marginBottom: 12, textAlign: 'center' }}>
                 <h1 style={{ fontSize: 56, fontWeight: 'bold', color: '#0f5f0f', textShadow: '2px 2px 4px rgba(0,0,0,0.2)' }}>TapuTapu</h1>
                 <p style={{ fontSize: 16, color: '#1b4d1b', marginTop: 8, fontStyle: 'italic' }}>{t.navigateWithNature}</p>
               </div>
+
               <button onClick={() => setViewMode('map')} style={{ width: 280, height: 70, borderRadius: 20, backgroundColor: '#10b981', color: 'white', fontSize: 28, fontWeight: 'bold', border: 'none', cursor: 'pointer' }}>{t.eikime}</button>
               <button onClick={() => setViewMode('history')} style={{ width: 280, height: 70, borderRadius: 20, backgroundColor: '#3b82f6', color: 'white', fontSize: 28, fontWeight: 'bold', border: 'none', cursor: 'pointer' }}>{t.myTrails}</button>
+              <button onClick={() => setViewMode('photos')} style={{ width: 280, height: 70, borderRadius: 20, backgroundColor: '#f59e0b', color: 'white', fontSize: 28, fontWeight: 'bold', border: 'none', cursor: 'pointer' }}>{t.photos}</button>
               <button onClick={() => setViewMode('lost')} style={{ width: 280, height: 70, borderRadius: 20, backgroundColor: '#dc2626', color: 'white', fontSize: 28, fontWeight: 'bold', border: 'none', cursor: 'pointer' }}>{t.sos}</button>
             </div>
 
@@ -870,66 +1262,207 @@ export default function MapPage() {
           </>
         )}
 
-        {viewMode === 'map' && (
+        {(viewMode === 'map' || viewMode === 'navigation') && (
           <>
-            {/* top bar */}
-            <div style={{ position: 'absolute', top: 24, left: 24, zIndex: 1100, display: 'flex', alignItems: 'center', gap: 12, pointerEvents: 'auto' }}>
-              <button onClick={() => setViewMode('landing')} style={{ width: 46, height: 46, borderRadius: 18, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20, backgroundColor: '#a78bfa', color: 'white', border: '3px solid white', cursor: 'pointer' }}>⌂</button>
+            {/* top-left: home + transport */}
+            <div style={{ position: 'absolute', top: isMobile ? 14 : 24, left: isMobile ? 14 : 24, zIndex: 1100, display: 'flex', alignItems: 'center', gap: 10, pointerEvents: 'auto' }}>
+              <button onClick={() => setViewMode('landing')} style={{ width: isMobile ? 44 : 46, height: isMobile ? 44 : 46, borderRadius: 18, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20, backgroundColor: '#a78bfa', color: 'white', border: '3px solid white', cursor: 'pointer' }}>⌂</button>
 
-              <div style={{ backgroundColor: 'rgba(255,255,255,0.95)', backdropFilter: 'blur(12px)', boxShadow: '0 12px 22px rgba(0,0,0,0.10)', borderRadius: 9999, padding: 8, display: 'flex', alignItems: 'center', gap: 10, border: '1px solid rgba(255,255,255,0.6)' }}>
-                {(['walking', 'cycling', 'driving'] as TransportMode[]).map((m) => (
-                  <button
-                    key={m}
-                    onClick={() => setTransportMode(m)}
-                    style={{
-                      width: 42,
-                      height: 42,
-                      borderRadius: 9999,
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      fontSize: 18,
-                      backgroundColor: transportMode === m ? '#3b82f6' : '#f3f4f6',
-                      color: transportMode === m ? 'white' : '#111827',
-                      border: 'none',
-                      cursor: 'pointer'
-                    }}
-                  >
-                    {m === 'walking' ? '🚶' : m === 'cycling' ? '🚴' : '🚗'}
-                  </button>
-                ))}
-              </div>
+              {viewMode === 'map' && (
+                <div style={{ backgroundColor: 'rgba(255,255,255,0.95)', backdropFilter: 'blur(12px)', boxShadow: '0 12px 22px rgba(0,0,0,0.10)', borderRadius: 9999, padding: 8, display: 'flex', alignItems: 'center', gap: 10, border: '1px solid rgba(255,255,255,0.6)' }}>
+                  {(['walking', 'cycling', 'driving'] as TransportMode[]).map((m) => (
+                    <button
+                      key={m}
+                      onClick={() => setTransportMode(m)}
+                      style={{
+                        width: isMobile ? 40 : 42,
+                        height: isMobile ? 40 : 42,
+                        borderRadius: 9999,
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        fontSize: isMobile ? 16 : 18,
+                        backgroundColor: transportMode === m ? '#3b82f6' : '#f3f4f6',
+                        color: transportMode === m ? 'white' : '#111827',
+                        border: 'none',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      {m === 'walking' ? '🚶' : m === 'cycling' ? '🚴' : '🚗'}
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
 
-            {/* top-right controls (kept compact) */}
-            <div style={{ position: 'absolute', top: 24, right: 24, zIndex: 1100, display: 'flex', gap: 10 }}>
-              <button onClick={() => setSoundEnabled(!soundEnabled)} style={{ width: 46, height: 46, borderRadius: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, backgroundColor: 'rgba(255,255,255,0.95)', border: '1px solid rgba(255,255,255,0.6)', cursor: 'pointer' }}>
+            {/* top-right: sound + language */}
+            <div style={{ position: 'absolute', top: isMobile ? 14 : 24, right: isMobile ? 14 : 24, zIndex: 1100, display: 'flex', gap: 10 }}>
+              <button onClick={() => setSoundEnabled(!soundEnabled)} style={{ width: isMobile ? 44 : 46, height: isMobile ? 44 : 46, borderRadius: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, backgroundColor: 'rgba(255,255,255,0.95)', border: '1px solid rgba(255,255,255,0.6)', cursor: 'pointer' }}>
                 {soundEnabled ? '🔊' : '🔇'}
               </button>
-              <button onClick={() => setLanguage(language === 'en' ? 'lt' : 'en')} style={{ width: 46, height: 46, borderRadius: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 'bold', backgroundColor: 'rgba(255,255,255,0.95)', border: '1px solid rgba(255,255,255,0.6)', cursor: 'pointer' }}>
+              <button onClick={() => setLanguage(language === 'en' ? 'lt' : 'en')} style={{ width: isMobile ? 44 : 46, height: isMobile ? 44 : 46, borderRadius: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 'bold', backgroundColor: 'rgba(255,255,255,0.95)', border: '1px solid rgba(255,255,255,0.6)', cursor: 'pointer' }}>
                 {language.toUpperCase()}
               </button>
             </div>
 
-            {/* weather moved to top-left under controls */}
-            {weather && (
-              <div style={{ position: 'absolute', top: 86, left: 24, zIndex: 1100, backgroundColor: 'rgba(255,255,255,0.92)', backdropFilter: 'blur(12px)', borderRadius: 9999, padding: '8px 12px', display: 'flex', alignItems: 'center', gap: 10, border: '1px solid rgba(255,255,255,0.6)', boxShadow: '0 10px 18px rgba(0,0,0,0.08)' }}>
-                <span style={{ fontSize: 22 }}>{weather.icon}</span>
-                <div style={{ display: 'flex', flexDirection: 'column', lineHeight: 1.1 }}>
-                  <span style={{ fontSize: 10, fontWeight: 'bold', color: '#9ca3af' }}>{t.weather}</span>
-                  <span style={{ fontSize: 14, fontWeight: 'bold', color: '#111827' }}>{weather.temp}{t.temp}</span>
+            {/* Map view: search + weather */}
+            {viewMode === 'map' && (
+              <>
+                {/* Search bar */}
+                <div style={{
+                  position: 'absolute',
+                  top: isMobile ? 68 : 86,
+                  left: isMobile ? 14 : 24,
+                  right: isMobile ? 14 : undefined,
+                  zIndex: 1200,
+                  pointerEvents: 'auto',
+                }}>
+                  <div style={{
+                    display: 'flex',
+                    gap: 8,
+                    alignItems: 'center',
+                    backgroundColor: 'rgba(255,255,255,0.92)',
+                    backdropFilter: 'blur(12px)',
+                    border: '1px solid rgba(255,255,255,0.7)',
+                    borderRadius: 16,
+                    padding: '8px 10px',
+                    boxShadow: '0 12px 24px rgba(0,0,0,0.10)'
+                  }}>
+                    <input
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                      onKeyDown={(e) => { if (e.key === 'Enter') searchAddress(); }}
+                      placeholder={t.searchPlaceholder}
+                      style={{
+                        flex: 1,
+                        border: 'none',
+                        outline: 'none',
+                        background: 'transparent',
+                        fontSize: 14
+                      }}
+                    />
+                    <button
+                      onClick={searchAddress}
+                      disabled={searchLoading}
+                      style={{
+                        border: 'none',
+                        cursor: 'pointer',
+                        backgroundColor: '#2563eb',
+                        color: 'white',
+                        borderRadius: 12,
+                        padding: '8px 10px',
+                        fontWeight: 700,
+                        fontSize: 12,
+                        opacity: searchLoading ? 0.7 : 1
+                      }}
+                    >
+                      {searchLoading ? '…' : t.searchGo}
+                    </button>
+                  </div>
+
+                  {searchResults.length > 0 && (
+                    <div style={{
+                      marginTop: 8,
+                      backgroundColor: 'rgba(255,255,255,0.95)',
+                      backdropFilter: 'blur(12px)',
+                      border: '1px solid rgba(255,255,255,0.7)',
+                      borderRadius: 16,
+                      overflow: 'hidden',
+                      maxHeight: isMobile ? 180 : 220,
+                      overflowY: 'auto'
+                    }}>
+                      {searchResults.map((r, idx) => (
+                        <button
+                          key={idx}
+                          onClick={() => {
+                            const lat = Number(r.lat);
+                            const lng = Number(r.lon);
+                            setMainDestination({ lat, lng });
+                            setNotification({ type: 'info', msg: t.destinationSet });
+                            setSearchResults([]);
+                            mapRef.current?.setView([lat, lng], 15, { animate: true });
+                            if (isMobile) setPitstopsCollapsed(true);
+                          }}
+                          style={{
+                            width: '100%',
+                            textAlign: 'left',
+                            padding: '10px 12px',
+                            border: 'none',
+                            background: 'transparent',
+                            cursor: 'pointer',
+                            borderBottom: idx === searchResults.length - 1 ? 'none' : '1px solid #eef2f7'
+                          }}
+                        >
+                          <div style={{ fontSize: 12, fontWeight: 700, color: '#111827' }}>
+                            {String(r.display_name).split(',').slice(0, 2).join(',')}
+                          </div>
+                          <div style={{ fontSize: 11, color: '#6b7280', marginTop: 2 }}>
+                            {r.display_name}
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                  )}
                 </div>
-              </div>
+
+                {/* weather */}
+                {weather && !isMobile && (
+                  <div style={{ position: 'absolute', top: 140, left: 24, zIndex: 1100, backgroundColor: 'rgba(255,255,255,0.92)', backdropFilter: 'blur(12px)', borderRadius: 9999, padding: '8px 12px', display: 'flex', alignItems: 'center', gap: 10, border: '1px solid rgba(255,255,255,0.6)', boxShadow: '0 10px 18px rgba(0,0,0,0.08)' }}>
+                    <span style={{ fontSize: 22 }}>{weather.icon}</span>
+                    <div style={{ display: 'flex', flexDirection: 'column', lineHeight: 1.1 }}>
+                      <span style={{ fontSize: 10, fontWeight: 'bold', color: '#9ca3af' }}>{t.weather}</span>
+                      <span style={{ fontSize: 14, fontWeight: 'bold', color: '#111827' }}>{weather.temp}{t.temp}</span>
+                    </div>
+                  </div>
+                )}
+              </>
             )}
 
-            {/* floating buttons */}
-            <div style={{ position: 'absolute', top: 120, right: 24, zIndex: 1100, display: 'flex', flexDirection: 'column', gap: 16 }}>
-              <button onClick={toggleRecording} style={{ width: 60, height: 60, borderRadius: 30, boxShadow: '0 16px 26px rgba(0,0,0,0.12)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', backgroundColor: isRecording ? '#dc2626' : 'white', border: 'none', cursor: 'pointer' }}>
-                <div style={{ width: 14, height: 14, borderRadius: '50%', backgroundColor: isRecording ? 'white' : '#dc2626', animation: isRecording ? 'pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite' : 'none' }} />
-                <span style={{ fontSize: 8, marginTop: 6, fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: 0.5 }}>Rec</span>
+            {/* Floating buttons (map + navigation) */}
+            <div style={{
+              position: 'absolute',
+              top: isMobile ? 140 : 170,
+              right: isMobile ? 12 : 24,
+              zIndex: 1100,
+              display: 'flex',
+              flexDirection: 'column',
+              gap: isMobile ? 12 : 16
+            }}>
+              {viewMode === 'map' && (
+                <button onClick={toggleRecording} style={{ width: isMobile ? 54 : 60, height: isMobile ? 54 : 60, borderRadius: 9999, boxShadow: '0 16px 26px rgba(0,0,0,0.12)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', backgroundColor: isRecording ? '#dc2626' : 'white', border: 'none', cursor: 'pointer' }}>
+                  <div style={{ width: 14, height: 14, borderRadius: '50%', backgroundColor: isRecording ? 'white' : '#dc2626', animation: isRecording ? 'pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite' : 'none' }} />
+                  <span style={{ fontSize: 8, marginTop: 6, fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: 0.5 }}>
+                    {t.trailsBtn}{isRecording ? ` ${t.trailsOn}` : ''}
+                  </span>
+                </button>
+              )}
+
+              {/* Add photo */}
+              <button
+                onClick={openPhotoPicker}
+                style={{
+                  width: isMobile ? 54 : 60,
+                  height: isMobile ? 54 : 60,
+                  borderRadius: 9999,
+                  boxShadow: '0 16px 26px rgba(0,0,0,0.12)',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  backgroundColor: '#f59e0b',
+                  color: 'white',
+                  border: 'none',
+                  cursor: 'pointer'
+                }}
+                title={t.addPhoto}
+              >
+                <span style={{ fontSize: 20, fontWeight: 900 }}>📷</span>
+                <span style={{ fontSize: 8, marginTop: 4, fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: 0.5 }}>
+                  {t.photos}
+                </span>
               </button>
 
-              {mainDestination && (
+              {viewMode === 'map' && mainDestination && (
                 <button
                   onClick={() => {
                     setIsBuilderMode(!isBuilderMode);
@@ -939,88 +1472,157 @@ export default function MapPage() {
                       setHighlightedSegmentIndex(null);
                       pinMarkerLayersRef.current.forEach((m) => m.remove());
                       pinMarkerLayersRef.current = [];
+                      if (isMobile) setPitstopsCollapsed(true);
+                    } else {
+                      if (isMobile) setPitstopsCollapsed(false);
                     }
                   }}
-                  style={{ width: 60, height: 60, borderRadius: 30, backgroundColor: isBuilderMode ? '#16a34a' : '#10b981', color: 'white', border: 'none', cursor: 'pointer', boxShadow: '0 16px 26px rgba(0,0,0,0.12)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}
+                  style={{ width: isMobile ? 54 : 60, height: isMobile ? 54 : 60, borderRadius: 9999, backgroundColor: isBuilderMode ? '#16a34a' : '#10b981', color: 'white', border: 'none', cursor: 'pointer', boxShadow: '0 16px 26px rgba(0,0,0,0.12)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}
                 >
-                  <span style={{ fontSize: 22, fontWeight: 'bold' }}>{isBuilderMode ? '✓' : '+'}</span>
+                  <span style={{ fontSize: isMobile ? 20 : 22, fontWeight: 'bold' }}>{isBuilderMode ? '✓' : '+'}</span>
                   <span style={{ fontSize: 8, fontWeight: 'bold', textTransform: 'uppercase' }}>PIN</span>
                 </button>
               )}
 
-              <button onClick={() => mapRef.current?.locate({ setView: true, maxZoom: 15, enableHighAccuracy: true })} style={{ width: 60, height: 60, backgroundColor: '#16a34a', border: '4px solid white', borderRadius: 30, cursor: 'pointer', boxShadow: '0 16px 26px rgba(0,0,0,0.12)', color: 'white', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
+              <button onClick={() => mapRef.current?.locate({ setView: true, maxZoom: 15, enableHighAccuracy: true })} style={{ width: isMobile ? 54 : 60, height: isMobile ? 54 : 60, backgroundColor: '#16a34a', border: '4px solid white', borderRadius: 9999, cursor: 'pointer', boxShadow: '0 16px 26px rgba(0,0,0,0.12)', color: 'white', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
                 <span style={{ fontSize: 18 }}>📍</span>
                 <span style={{ fontSize: 8, fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: 0.5 }}>HERE</span>
               </button>
             </div>
 
-            {/* builder sheet - smaller */}
-            {isBuilderMode && (
-              <div style={{
-                position: 'absolute',
-                bottom: 24,
-                left: 24,
-                zIndex: 1100,
-                pointerEvents: 'auto',
-                backgroundColor: 'rgba(255,255,255,0.92)',
-                backdropFilter: 'blur(12px)',
-                borderRadius: 28,
-                padding: 16,
-                width: 280,
-                boxShadow: '0 18px 32px rgba(0,0,0,0.12)',
-                border: '1px solid rgba(255,255,255,0.7)'
-              }}>
-                <h4 style={{ color: '#111827', fontWeight: 'bold', marginBottom: 12, fontSize: 12, letterSpacing: 1, textTransform: 'uppercase' }}>📍 {t.pitstops}</h4>
+            {/* navigation HUD */}
+            {viewMode === 'navigation' && (
+              <div style={{ position: 'absolute', inset: 0, zIndex: 1100, display: 'flex', flexDirection: 'column', alignItems: 'flex-start', justifyContent: 'flex-start', paddingTop: isMobile ? 14 : 24, paddingLeft: isMobile ? 14 : 24, pointerEvents: 'none' }}>
+                <button onClick={() => setViewMode('map')} style={{ pointerEvents: 'auto', width: isMobile ? 48 : 56, height: isMobile ? 48 : 56, borderRadius: 18, backgroundColor: '#a78bfa', color: 'white', border: '3px solid white', cursor: 'pointer', fontWeight: 'bold', fontSize: 20 }}>⌂</button>
 
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 10, maxHeight: 240, overflowY: 'auto' }}>
-                  <div
-                    onClick={() => { setViewMode('navigation'); destinationRef.current = mainDestination; lastAnnounceDistRef.current = 0; }}
-                    style={{ backgroundColor: '#f3f4f6', padding: 12, borderRadius: 14, display: 'flex', alignItems: 'center', justifyContent: 'space-between', cursor: 'pointer' }}
-                  >
-                    <span style={{ fontWeight: 'bold', color: '#111827', fontSize: 14 }}>PIN A ({t.start})</span>
-                    <span style={{ fontSize: 18, color: '#2563eb' }}>▶</span>
-                  </div>
-
-                  {pinSegments.length > 0 && pinSegments.map((pin, idx) => (
-                    <div
-                      key={idx}
-                      onClick={() => setHighlightedSegmentIndex(highlightedSegmentIndex === idx ? null : idx)}
-                      style={{
-                        backgroundColor: highlightedSegmentIndex === idx ? '#dbeafe' : '#f9fafb',
-                        padding: 12,
-                        borderRadius: 14,
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'space-between',
-                        cursor: 'pointer',
-                        border: highlightedSegmentIndex === idx ? '2px solid #2563eb' : '1px solid #e5e7eb'
-                      }}
-                    >
-                      <div style={{ flex: 1 }}>
-                        <span style={{ fontWeight: 'bold', color: '#10b981', fontSize: 14 }}>PIN {pin.letter}</span>
-                        {segmentRoutes[idx] && (
-                          <div style={{ fontSize: 11, color: '#6b7280', marginTop: 6, backgroundColor: 'white', padding: 8, borderRadius: 10 }}>
-                            <div>← From PIN {segmentRoutes[idx].from}</div>
-                            <div style={{ color: '#2563eb', fontWeight: 'bold' }}>{formatDist(segmentRoutes[idx].distance)}</div>
-                            <div style={{ color: '#16a34a', fontWeight: 'bold' }}>{formatTime(segmentRoutes[idx].time)}</div>
-                          </div>
-                        )}
-                      </div>
-
-                      <button onClick={(e) => { e.stopPropagation(); removePinSegment(pin.letter); }} style={{ width: 28, height: 28, borderRadius: '50%', backgroundColor: '#fee2e2', color: '#dc2626', border: 'none', cursor: 'pointer', fontWeight: 'bold' }}>×</button>
+                {nextInstruction && (
+                  <div style={{ pointerEvents: 'auto', marginTop: 12, backgroundColor: 'rgba(255,255,255,0.95)', backdropFilter: 'blur(12px)', borderRadius: 18, padding: '10px 14px', boxShadow: '0 4px 12px rgba(0,0,0,0.12)', display: 'flex', alignItems: 'center', gap: 12 }}>
+                    <span style={{ fontSize: 22 }}>🧭</span>
+                    <div style={{ display: 'flex', flexDirection: 'column' }}>
+                      <span style={{ fontSize: 10, fontWeight: 'bold', color: '#9ca3af', textTransform: 'uppercase', letterSpacing: 0.5 }}>{t.nextTurn}</span>
+                      <span style={{ fontSize: 13, fontWeight: 'bold', color: '#111827', marginTop: 2 }}>{nextInstruction}</span>
                     </div>
-                  ))}
+                  </div>
+                )}
+
+                <div style={{ pointerEvents: 'auto', marginTop: 12, backgroundColor: 'rgba(255,255,255,0.9)', backdropFilter: 'blur(12px)', borderRadius: 18, padding: '10px 16px', boxShadow: '0 4px 12px rgba(0,0,0,0.1)', display: 'flex', alignItems: 'center', gap: 16 }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                    <span style={{ fontSize: 9, fontWeight: 'bold', color: '#9ca3af', textTransform: 'uppercase', letterSpacing: 0.5 }}>{t.distance}</span>
+                    <span style={{ fontSize: 16, fontWeight: 'bold', color: '#111827', marginTop: 2 }}>{formatDist(navStats.distanceRem)}</span>
+                  </div>
+                  <div style={{ width: 1, backgroundColor: '#e5e7eb', height: 44 }} />
+                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                    <span style={{ fontSize: 9, fontWeight: 'bold', color: '#9ca3af', textTransform: 'uppercase', letterSpacing: 0.5 }}>{t.speed}</span>
+                    <span style={{ fontSize: 16, fontWeight: 'bold', color: '#16a34a', marginTop: 2 }}>{navStats.speed} km/h</span>
+                  </div>
                 </div>
               </div>
             )}
 
-            {/* route selector (unchanged layout, but routes are thinner now) */}
-            {mainDestination && routes.length > 0 && !isBuilderMode && (
-              <div style={{ position: 'absolute', bottom: 40, right: 32, zIndex: 1100, width: '100%', maxWidth: 420, pointerEvents: 'none', display: 'flex', flexDirection: 'column', gap: 16, alignItems: 'flex-end' }}>
+            {/* PITSTOPS as collapsible bottom sheet on mobile (map view only) */}
+            {viewMode === 'map' && showPitstopsPanel && (
+              <div
+                style={{
+                  position: 'absolute',
+                  left: isMobile ? 10 : 24,
+                  right: isMobile ? 10 : undefined,
+                  bottom: isMobile ? 10 : 24,
+                  zIndex: 1200,
+                  pointerEvents: 'auto',
+                  backgroundColor: 'rgba(255,255,255,0.92)',
+                  backdropFilter: 'blur(12px)',
+                  borderRadius: isMobile ? 22 : 28,
+                  padding: isMobile ? 12 : 16,
+                  width: isMobile ? 'auto' : 280,
+                  boxShadow: '0 18px 32px rgba(0,0,0,0.12)',
+                  border: '1px solid rgba(255,255,255,0.7)',
+                }}
+              >
+                <div
+                  onClick={() => { if (isMobile) setPitstopsCollapsed(v => !v); }}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    cursor: isMobile ? 'pointer' : 'default',
+                    paddingBottom: isMobile ? 8 : 12,
+                    userSelect: 'none'
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                    <div style={{ width: 8, height: 8, borderRadius: 9999, backgroundColor: '#10b981' }} />
+                    <h4 style={{ color: '#111827', fontWeight: 'bold', fontSize: 12, letterSpacing: 1, textTransform: 'uppercase', margin: 0 }}>
+                      {t.pitstops}
+                    </h4>
+                  </div>
+
+                  {isMobile && (
+                    <div style={{ fontSize: 12, fontWeight: 800, color: '#2563eb' }}>
+                      {pitstopsCollapsed ? '▲' : '▼'}
+                    </div>
+                  )}
+                </div>
+
+                {!isMobile || !pitstopsCollapsed ? (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 10, maxHeight: isMobile ? 170 : 240, overflowY: 'auto' }}>
+                    <div
+                      onClick={() => {
+                        setViewMode('navigation');
+                        destinationRef.current = mainDestination;
+                        lastAnnounceDistRef.current = 0;
+                        if (soundEnabled) playSound('navigation-start');
+                      }}
+                      style={{ backgroundColor: '#f3f4f6', padding: 12, borderRadius: 14, display: 'flex', alignItems: 'center', justifyContent: 'space-between', cursor: 'pointer' }}
+                    >
+                      <span style={{ fontWeight: 'bold', color: '#111827', fontSize: 14 }}>PIN A ({t.start})</span>
+                      <span style={{ fontSize: 18, color: '#2563eb' }}>▶</span>
+                    </div>
+
+                    {pinSegments.length > 0 && pinSegments.map((pin, idx) => (
+                      <div
+                        key={idx}
+                        onClick={() => setHighlightedSegmentIndex(highlightedSegmentIndex === idx ? null : idx)}
+                        style={{
+                          backgroundColor: highlightedSegmentIndex === idx ? '#dbeafe' : '#f9fafb',
+                          padding: 12,
+                          borderRadius: 14,
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                          cursor: 'pointer',
+                          border: highlightedSegmentIndex === idx ? '2px solid #2563eb' : '1px solid #e5e7eb'
+                        }}
+                      >
+                        <div style={{ flex: 1 }}>
+                          <span style={{ fontWeight: 'bold', color: '#10b981', fontSize: 14 }}>PIN {pin.letter}</span>
+                          {segmentRoutes[idx] && (
+                            <div style={{ fontSize: 11, color: '#6b7280', marginTop: 6, backgroundColor: 'white', padding: 8, borderRadius: 10 }}>
+                              <div>← From PIN {segmentRoutes[idx].from}</div>
+                              <div style={{ color: '#2563eb', fontWeight: 'bold' }}>{formatDist(segmentRoutes[idx].distance)}</div>
+                              <div style={{ color: '#16a34a', fontWeight: 'bold' }}>{formatTime(segmentRoutes[idx].time)}</div>
+                            </div>
+                          )}
+                        </div>
+
+                        <button onClick={(e) => { e.stopPropagation(); removePinSegment(pin.letter); }} style={{ width: 28, height: 28, borderRadius: '50%', backgroundColor: '#fee2e2', color: '#dc2626', border: 'none', cursor: 'pointer', fontWeight: 'bold' }}>×</button>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div style={{ fontSize: 12, color: '#6b7280' }}>
+                    Tap to expand…
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* route selector (map view only) */}
+            {viewMode === 'map' && mainDestination && routes.length > 0 && !isBuilderMode && (
+              <div style={{ position: 'absolute', bottom: isMobile ? 18 : 40, right: isMobile ? 14 : 32, zIndex: 1100, width: '100%', maxWidth: 420, pointerEvents: 'none', display: 'flex', flexDirection: 'column', gap: 16, alignItems: 'flex-end' }}>
                 {showRouteSelector && (
-                  <div style={{ pointerEvents: 'auto', backgroundColor: 'rgba(255,255,255,0.97)', backdropFilter: 'blur(12px)', borderRadius: 56, padding: 28, boxShadow: '0 25px 40px -5px rgba(0,0,0,0.15)', maxHeight: '55vh', overflow: 'auto', border: '2px solid white', width: '100%' }}>
-                    <h3 style={{ fontWeight: 'bold', fontSize: 14, textTransform: 'uppercase', letterSpacing: 1.5, color: '#2563eb', marginBottom: 20 }}>Routes</h3>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+                  <div style={{ pointerEvents: 'auto', backgroundColor: 'rgba(255,255,255,0.97)', backdropFilter: 'blur(12px)', borderRadius: 40, padding: 18, boxShadow: '0 25px 40px -5px rgba(0,0,0,0.15)', maxHeight: '55vh', overflow: 'auto', border: '2px solid white', width: '100%' }}>
+                    <h3 style={{ fontWeight: 'bold', fontSize: 13, textTransform: 'uppercase', letterSpacing: 1.5, color: '#2563eb', marginBottom: 12 }}>Routes</h3>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
                       {routes.map((route, idx) => (
                         <button
                           key={idx}
@@ -1030,35 +1632,35 @@ export default function MapPage() {
                             display: 'flex',
                             alignItems: 'center',
                             justifyContent: 'space-between',
-                            padding: 18,
+                            padding: 14,
                             backgroundColor: selectedRouteIndex === idx ? '#dbeafe' : '#f9fafb',
-                            borderRadius: 20,
+                            borderRadius: 18,
                             cursor: 'pointer',
                             transition: 'all 0.3s ease',
                             border: selectedRouteIndex === idx ? '3px solid #2563eb' : '2px solid #e5e7eb',
                             textAlign: 'left',
                           }}
                         >
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 18, flex: 1 }}>
-                            <div style={{ width: 36, height: 36, backgroundColor: selectedRouteIndex === idx ? '#2563eb' : '#e5e7eb', color: 'white', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 14, flex: 1 }}>
+                            <div style={{ width: 34, height: 34, backgroundColor: selectedRouteIndex === idx ? '#2563eb' : '#e5e7eb', color: 'white', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold' }}>
                               {idx + 1}
                             </div>
                             <div style={{ display: 'flex', flexDirection: 'column' }}>
-                              <span style={{ fontWeight: 'bold', color: '#111827', fontSize: 16 }}>{formatTime(route.summary.totalTime)}</span>
+                              <span style={{ fontWeight: 'bold', color: '#111827', fontSize: 15 }}>{formatTime(route.summary.totalTime)}</span>
                               <span style={{ color: '#9ca3af', fontSize: 12, marginTop: 2 }}>{(route.summary.totalDistance / 1000).toFixed(2)} km</span>
                             </div>
                           </div>
-                          {selectedRouteIndex === idx && <span style={{ fontSize: 24, color: '#2563eb', fontWeight: 'bold' }}>✓</span>}
+                          {selectedRouteIndex === idx && <span style={{ fontSize: 22, color: '#2563eb', fontWeight: 'bold' }}>✓</span>}
                         </button>
                       ))}
                     </div>
                   </div>
                 )}
 
-                <div style={{ pointerEvents: 'auto', backgroundColor: 'rgba(255,255,255,0.97)', backdropFilter: 'blur(12px)', borderRadius: 56, padding: 18, boxShadow: '0 25px 40px -5px rgba(0,0,0,0.15)', display: 'flex', alignItems: 'center', gap: 18, width: '100%' }}>
-                  <div onClick={() => setShowRouteSelector(!showRouteSelector)} style={{ flex: 1, display: 'flex', flexDirection: 'column', paddingLeft: 24, cursor: 'pointer' }}>
+                <div style={{ pointerEvents: 'auto', backgroundColor: 'rgba(255,255,255,0.97)', backdropFilter: 'blur(12px)', borderRadius: 40, padding: 14, boxShadow: '0 25px 40px -5px rgba(0,0,0,0.15)', display: 'flex', alignItems: 'center', gap: 14, width: isMobile ? 320 : '100%' }}>
+                  <div onClick={() => setShowRouteSelector(!showRouteSelector)} style={{ flex: 1, display: 'flex', flexDirection: 'column', paddingLeft: 10, cursor: 'pointer' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                      <span style={{ fontSize: 28, fontWeight: 'bold', color: '#111827' }}>{formatTime(routes[selectedRouteIndex]?.summary.totalTime || 0)}</span>
+                      <span style={{ fontSize: 22, fontWeight: 'bold', color: '#111827' }}>{formatTime(routes[selectedRouteIndex]?.summary.totalTime || 0)}</span>
                       <span style={{ fontSize: 12, fontWeight: 'bold', color: '#2563eb', backgroundColor: '#dbeafe', paddingLeft: 10, paddingRight: 10, paddingTop: 5, paddingBottom: 5, borderRadius: 9999 }}>
                         {(routes[selectedRouteIndex]?.summary.totalDistance / 1000).toFixed(2)} km
                       </span>
@@ -1066,9 +1668,9 @@ export default function MapPage() {
                     <span style={{ fontSize: 10, fontWeight: 'bold', textTransform: 'uppercase', color: '#9ca3af', letterSpacing: 1.2, marginTop: 4 }}>{routes.length} ROUTE{routes.length === 1 ? '' : 'S'}</span>
                   </div>
 
-                  <div style={{ display: 'flex', gap: 12 }}>
-                    <button onClick={() => { setMainDestination(null); setPinSegments([]); setRoutes([]); setShowRouteSelector(false); setHighlightedSegmentIndex(null); }} style={{ width: 52, height: 52, borderRadius: 26, backgroundColor: '#fee2e2', color: '#dc2626', border: 'none', cursor: 'pointer', fontWeight: 'bold' }}>✕</button>
-                    <button onClick={() => { setViewMode('navigation'); destinationRef.current = mainDestination; lastAnnounceDistRef.current = 0; }} style={{ height: 52, paddingLeft: 36, paddingRight: 36, backgroundColor: '#2563eb', color: 'white', borderRadius: 9999, fontWeight: 'bold', fontSize: 16, boxShadow: '0 10px 15px -3px rgba(37, 99, 235, 0.30)', cursor: 'pointer', border: 'none', whiteSpace: 'nowrap' }}>GO</button>
+                  <div style={{ display: 'flex', gap: 10 }}>
+                    <button onClick={() => { setMainDestination(null); setPinSegments([]); setRoutes([]); setShowRouteSelector(false); setHighlightedSegmentIndex(null); }} style={{ width: 46, height: 46, borderRadius: 9999, backgroundColor: '#fee2e2', color: '#dc2626', border: 'none', cursor: 'pointer', fontWeight: 'bold' }}>✕</button>
+                    <button onClick={() => { setViewMode('navigation'); destinationRef.current = mainDestination; lastAnnounceDistRef.current = 0; if (soundEnabled) playSound('navigation-start'); }} style={{ height: 46, paddingLeft: 22, paddingRight: 22, backgroundColor: '#2563eb', color: 'white', borderRadius: 9999, fontWeight: 'bold', fontSize: 14, boxShadow: '0 10px 15px -3px rgba(37, 99, 235, 0.30)', cursor: 'pointer', border: 'none', whiteSpace: 'nowrap' }}>GO</button>
                   </div>
                 </div>
               </div>
@@ -1076,52 +1678,35 @@ export default function MapPage() {
           </>
         )}
 
-        {viewMode === 'navigation' && (
-          <>
-            <div style={{ position: 'absolute', inset: 0, zIndex: 1100, display: 'flex', flexDirection: 'column', alignItems: 'flex-start', justifyContent: 'flex-start', paddingTop: 24, paddingLeft: 24, pointerEvents: 'none' }}>
-              <button onClick={() => setViewMode('map')} style={{ pointerEvents: 'auto', width: 56, height: 56, borderRadius: 18, backgroundColor: '#a78bfa', color: 'white', border: '3px solid white', cursor: 'pointer', fontWeight: 'bold', fontSize: 20 }}>⌂</button>
-
-              {nextInstruction && (
-                <div style={{ pointerEvents: 'auto', marginTop: 14, backgroundColor: 'rgba(255,255,255,0.95)', backdropFilter: 'blur(12px)', borderRadius: 18, padding: '10px 14px', boxShadow: '0 4px 12px rgba(0,0,0,0.12)', display: 'flex', alignItems: 'center', gap: 12 }}>
-                  <span style={{ fontSize: 22 }}>🧭</span>
-                  <div style={{ display: 'flex', flexDirection: 'column' }}>
-                    <span style={{ fontSize: 10, fontWeight: 'bold', color: '#9ca3af', textTransform: 'uppercase', letterSpacing: 0.5 }}>{t.nextTurn}</span>
-                    <span style={{ fontSize: 13, fontWeight: 'bold', color: '#111827', marginTop: 2 }}>{nextInstruction}</span>
-                  </div>
-                </div>
-              )}
-
-              <div style={{ pointerEvents: 'auto', marginTop: 14, backgroundColor: 'rgba(255,255,255,0.9)', backdropFilter: 'blur(12px)', borderRadius: 18, padding: '10px 16px', boxShadow: '0 4px 12px rgba(0,0,0,0.1)', display: 'flex', alignItems: 'center', gap: 16 }}>
-                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-                  <span style={{ fontSize: 9, fontWeight: 'bold', color: '#9ca3af', textTransform: 'uppercase', letterSpacing: 0.5 }}>{t.distance}</span>
-                  <span style={{ fontSize: 16, fontWeight: 'bold', color: '#111827', marginTop: 2 }}>{formatDist(navStats.distanceRem)}</span>
-                </div>
-                <div style={{ width: 1, backgroundColor: '#e5e7eb', height: 44 }} />
-                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-                  <span style={{ fontSize: 9, fontWeight: 'bold', color: '#9ca3af', textTransform: 'uppercase', letterSpacing: 0.5 }}>{t.speed}</span>
-                  <span style={{ fontSize: 16, fontWeight: 'bold', color: '#16a34a', marginTop: 2 }}>{navStats.speed} km/h</span>
-                </div>
-              </div>
-            </div>
-          </>
-        )}
-
         {viewMode === 'history' && (
-          <div style={{ position: 'absolute', inset: 0, zIndex: 5000, backgroundColor: '#f8fafc', padding: 40, overflow: 'auto' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 24, marginBottom: 48 }}>
+          <div style={{ position: 'absolute', inset: 0, zIndex: 5000, backgroundColor: '#f8fafc', padding: 24, overflow: 'auto' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 24 }}>
               <button onClick={() => setViewMode('landing')} style={{ width: 64, height: 64, backgroundColor: 'white', borderRadius: '50%', boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', border: 'none' }}>⌂</button>
               <h1 style={{ fontSize: 32, fontWeight: 'bold', color: '#111827', letterSpacing: -1 }}>{t.myTrails}</h1>
             </div>
 
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 24, paddingBottom: 96 }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 14, paddingBottom: 96 }}>
               {savedRoutes.map((route) => (
-                <div key={route.id} style={{ backgroundColor: 'white', padding: 32, borderRadius: 56, boxShadow: '0 1px 3px 0 rgba(0, 0, 0, 0.1)', border: '2px solid transparent' }}>
-                  <div onClick={() => loadSavedRoute(route)} style={{ display: 'flex', flexDirection: 'column', flex: 1, cursor: 'pointer' }}>
-                    <span style={{ fontWeight: 'bold', fontSize: 20, color: '#111827' }}>{route.date}</span>
-                    <span style={{ color: '#16a34a', fontSize: 12, fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: 1, marginTop: 4 }}>
-                      {(route.distance / 1000).toFixed(2)} km
-                    </span>
+                <div key={route.id} style={{ backgroundColor: 'white', padding: 18, borderRadius: 28, boxShadow: '0 1px 3px 0 rgba(0, 0, 0, 0.10)', border: '1px solid #eef2f7', display: 'flex', alignItems: 'center', gap: 12 }}>
+                  <div onClick={() => { void loadSavedRoute(route); }} style={{ display: 'flex', flexDirection: 'column', flex: 1, cursor: 'pointer' }}>
+                    <span style={{ fontWeight: 900, fontSize: 18, color: '#111827' }}>{formatTrailDate(route)}</span>
+                    <div style={{ marginTop: 6, display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+                      <span style={{ color: '#16a34a', fontSize: 12, fontWeight: 800, textTransform: 'uppercase', letterSpacing: 0.8 }}>
+                        {formatDist(route.distance)}
+                      </span>
+                      <span style={{ color: '#6b7280', fontSize: 12, fontWeight: 700 }}>
+                        {t.duration}: {formatTime(route.duration)}
+                      </span>
+                    </div>
                   </div>
+
+                  <button
+                    onClick={() => deleteSavedRoute(route.id)}
+                    style={{ width: 44, height: 44, borderRadius: 14, border: 'none', cursor: 'pointer', backgroundColor: '#fee2e2', color: '#dc2626', fontWeight: 900, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                    title={t.delete}
+                  >
+                    🗑️
+                  </button>
                 </div>
               ))}
 
@@ -1134,13 +1719,75 @@ export default function MapPage() {
           </div>
         )}
 
+        {viewMode === 'photos' && (
+          <div style={{ position: 'absolute', inset: 0, zIndex: 5000, backgroundColor: '#fff7ed', padding: 24, overflow: 'auto' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 24 }}>
+              <button onClick={() => setViewMode('landing')} style={{ width: 64, height: 64, backgroundColor: 'white', borderRadius: '50%', boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', border: 'none' }}>⌂</button>
+              <h1 style={{ fontSize: 32, fontWeight: 'bold', color: '#111827', letterSpacing: -1 }}>{t.photos}</h1>
+
+              <button
+                onClick={openPhotoPicker}
+                style={{
+                  marginLeft: 'auto',
+                  height: 48,
+                  paddingLeft: 16,
+                  paddingRight: 16,
+                  borderRadius: 9999,
+                  border: 'none',
+                  cursor: 'pointer',
+                  backgroundColor: '#f59e0b',
+                  color: 'white',
+                  fontWeight: 900,
+                  boxShadow: '0 12px 22px rgba(0,0,0,0.12)'
+                }}
+              >
+                📷 {t.addPhoto}
+              </button>
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 14, paddingBottom: 96 }}>
+              {photoPins.map((p) => (
+                <div key={p.id} style={{ backgroundColor: 'white', padding: 14, borderRadius: 24, border: '1px solid #fde68a', boxShadow: '0 1px 3px rgba(0,0,0,0.08)', display: 'flex', gap: 14, alignItems: 'center' }}>
+                  <div
+                    onClick={() => { void centerOnPhoto(p); }}
+                    style={{ cursor: 'pointer', width: 96, height: 72, borderRadius: 16, overflow: 'hidden', border: '1px solid #e5e7eb', background: '#f3f4f6', flexShrink: 0 }}
+                    title="Open on map"
+                  >
+                    <img src={p.dataUrl} alt="photo" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                  </div>
+
+                  <div onClick={() => { void centerOnPhoto(p); }} style={{ flex: 1, cursor: 'pointer' }}>
+                    <div style={{ fontWeight: 900, color: '#111827' }}>{formatPhotoDate(p)}</div>
+                    <div style={{ marginTop: 6, fontSize: 12, color: '#6b7280', fontWeight: 700 }}>
+                      {p.lat.toFixed(5)}, {p.lng.toFixed(5)}
+                    </div>
+                  </div>
+
+                  <button
+                    onClick={() => deletePhotoPin(p.id)}
+                    style={{ width: 44, height: 44, borderRadius: 14, border: 'none', cursor: 'pointer', backgroundColor: '#fee2e2', color: '#dc2626', fontWeight: 900, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                    title={t.delete}
+                  >
+                    🗑️
+                  </button>
+                </div>
+              ))}
+
+              {photoPins.length === 0 && (
+                <div style={{ textAlign: 'center', paddingTop: 160, color: '#fdba74', fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: 1, opacity: 0.9 }}>
+                  {t.noPhotosYet}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
         {viewMode === 'lost' && (
           <div style={{ position: 'absolute', inset: 0, zIndex: 7000 }}>
             <LostView lat={userLocation?.lat || 0} lng={userLocation?.lng || 0} onClose={() => setViewMode('landing')} />
           </div>
         )}
 
-        {/* notification moved to bottom-left, small */}
         {notification && viewMode !== 'navigation' && (
           <div style={{
             position: 'absolute',
