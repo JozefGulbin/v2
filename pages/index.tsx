@@ -144,7 +144,7 @@ const translations = {
     weather: 'Oras',
     temp: '°C',
     searchPlaceholder: 'Ieškoti tikslo…',
-    searchGo: 'GO',
+    searchGo: 'Ieškoti',
     tooShortNotSaved: 'Per trumpa — neišsaugota',
     destinationSet: 'Tikslas nustatytas',
 
@@ -214,6 +214,7 @@ export default function MapPage() {
   const pinMarkerLayersRef = useRef<any[]>([]);
   const segmentPolylinesRef = useRef<any[]>([]);
   const mainDestinationMarkerRef = useRef<any>(null);
+  const mainDestinationRef = useRef<{ lat: number; lng: number } | null>(null);
   const isBuilderModeRef = useRef(false);
   const lastAnnounceDistRef = useRef<number>(0);
 
@@ -345,6 +346,14 @@ export default function MapPage() {
   useEffect(() => { isRecordingRef.current = isRecording; }, [isRecording]);
   useEffect(() => { isBuilderModeRef.current = isBuilderMode; }, [isBuilderMode]);
   useEffect(() => { transportModeRef.current = transportMode; }, [transportMode]);
+  useEffect(() => { mainDestinationRef.current = mainDestination; }, [mainDestination]);
+
+  // Auto-dismiss notifications after 2.5 s
+  useEffect(() => {
+    if (!notification) return;
+    const timer = setTimeout(() => setNotification(null), 2500);
+    return () => clearTimeout(timer);
+  }, [notification]);
 
   useEffect(() => {
     isNavigatingRef.current = viewMode === 'navigation';
@@ -604,14 +613,19 @@ export default function MapPage() {
           if (highlightLayerRef.current) highlightLayerRef.current.remove();
 
           if (isBuilderModeRef.current) {
-            setPinSegments(prev => {
-              const newPin: PinSegment = {
-                letter: String.fromCharCode(66 + prev.length),
-                lat: e.latlng.lat,
-                lng: e.latlng.lng
-              };
-              return [...prev, newPin];
-            });
+            const clickedPt = { lat: e.latlng.lat, lng: e.latlng.lng };
+            const prevMain = mainDestinationRef.current;
+            if (prevMain) {
+              setPinSegments(prev => {
+                const previousMainAsB: PinSegment = { letter: 'B', lat: prevMain.lat, lng: prevMain.lng };
+                const shifted = prev.map((p, idx) => ({
+                  ...p,
+                  letter: String.fromCharCode(67 + idx)
+                }));
+                return [previousMainAsB, ...shifted];
+              });
+            }
+            setMainDestination(clickedPt);
           } else {
             if (!mainDestination) {
               setMainDestination({ lat: e.latlng.lat, lng: e.latlng.lng });
@@ -928,14 +942,13 @@ export default function MapPage() {
     if (segmentRoutes.length > 0 && pinSegments.length > 0) {
       segmentRoutes.forEach((segment, idx) => {
         if (!segment || !segment.coordinates || segment.coordinates.length === 0) return;
-        const colors = ['#ff6b6b', '#4ecdc4', '#45b7d1', '#f9ca24', '#6c5ce7', '#a8e6cf'];
-        const color = colors[idx % colors.length];
         const isHighlighted = idx === highlightedSegmentIndex;
+        const color = isHighlighted ? '#111827' : '#22c55e';
 
         const polyline = L.polyline(segment.coordinates, {
           color,
-          weight: isHighlighted ? 7 : 4,
-          opacity: isHighlighted ? 0.9 : 0.55,
+          weight: isHighlighted ? 8 : 4,
+          opacity: isHighlighted ? 0.95 : 0.5,
           lineCap: 'round',
           lineJoin: 'round'
         }).addTo(mapRef.current);
@@ -956,7 +969,7 @@ export default function MapPage() {
     pinSegments.forEach((pin) => {
       const icon = L.divIcon({
         className: 'bg-transparent',
-        html: `<div style="width: 42px; height: 42px; background: #10b981; border: 3px solid white; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: white; font-weight: 900; box-shadow: 0 12px 22px rgba(0,0,0,0.14);">${pin.letter}</div>`,
+        html: `<div style="width: 42px; height: 42px; background: #10b981; border: 3px solid white; border-radius: 50%; color: white; font-weight: 900; font-size: 16px; text-align: center; line-height: 36px; box-shadow: 0 12px 22px rgba(0,0,0,0.14);">${pin.letter}</div>`,
         iconSize: [42, 42],
         iconAnchor: [21, 21]
       });
@@ -1482,7 +1495,7 @@ export default function MapPage() {
             </div>
 
             {/* top-right: sound + language */}
-            <div style={{ position: 'absolute', top: uiTop, right: uiRight, zIndex: 1100, display: 'flex', gap: 10 }}>
+            <div style={{ position: 'absolute', top: isMobile ? `calc(var(--sat) + 58px)` : uiTop, right: uiRight, zIndex: 1100, display: 'flex', gap: 10 }}>
               <button
                 onClick={() => setSoundEnabled(!soundEnabled)}
                 style={{
@@ -1526,7 +1539,7 @@ export default function MapPage() {
                 {/* Search bar */}
                 <div style={{
                   position: 'absolute',
-                  top: `calc(var(--sat) + ${isMobile ? 60 : 72}px)`,
+                  top: `calc(var(--sat) + ${isMobile ? 108 : 72}px)`,
                   left: uiLeft,
                   right: uiRight,
                   zIndex: 1200,
@@ -1636,7 +1649,7 @@ export default function MapPage() {
             {/* Floating buttons (map + navigation) */}
             <div style={{
               position: 'absolute',
-              top: `calc(var(--sat) + ${isMobile ? 120 : 150}px)`,
+              top: `calc(var(--sat) + ${isMobile ? 156 : 150}px)`,
               right: uiRight,
               zIndex: 1100,
               display: 'flex',
@@ -1698,6 +1711,7 @@ export default function MapPage() {
                 <button
                   onClick={() => {
                     setIsBuilderMode(!isBuilderMode);
+                    setNotification(null);
                     if (isBuilderMode) {
                       setPinSegments([]);
                       setSegmentRoutes([]);
@@ -1812,10 +1826,10 @@ export default function MapPage() {
                   pointerEvents: 'auto',
                   backgroundColor: 'rgba(255,255,255,0.92)',
                   backdropFilter: 'blur(12px)',
-                  borderRadius: isMobile ? 22 : 28,
-                  padding: isMobile ? 12 : 16,
+                  borderRadius: isMobile ? 14 : 28,
+                  padding: isMobile ? 8 : 16,
                   width: isMobile ? 'auto' : 280,
-                  boxShadow: '0 18px 32px rgba(0,0,0,0.12)',
+                  boxShadow: isMobile ? '0 4px 10px rgba(0,0,0,0.08)' : '0 18px 32px rgba(0,0,0,0.12)',
                   border: '1px solid rgba(255,255,255,0.7)',
                 }}
               >
@@ -1853,7 +1867,7 @@ export default function MapPage() {
                         lastAnnounceDistRef.current = 0;
                         if (soundEnabled) playSound('navigation-start');
                       }}
-                      style={{ backgroundColor: '#f3f4f6', padding: 12, borderRadius: 14, display: 'flex', alignItems: 'center', justifyContent: 'space-between', cursor: 'pointer' }}
+                      style={{ backgroundColor: '#f3f4f6', padding: isMobile ? 8 : 12, borderRadius: 14, display: 'flex', alignItems: 'center', justifyContent: 'space-between', cursor: 'pointer' }}
                     >
                       <span style={{ fontWeight: 'bold', color: '#111827', fontSize: 14 }}>PIN A ({t.start})</span>
                       <span style={{ fontSize: 18, color: '#2563eb' }}>▶</span>
@@ -1865,7 +1879,7 @@ export default function MapPage() {
                         onClick={() => setHighlightedSegmentIndex(highlightedSegmentIndex === idx ? null : idx)}
                         style={{
                           backgroundColor: highlightedSegmentIndex === idx ? '#dbeafe' : '#f9fafb',
-                          padding: 12,
+                          padding: isMobile ? 8 : 12,
                           borderRadius: 14,
                           display: 'flex',
                           alignItems: 'center',
