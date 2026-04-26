@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect, useRef } from "react";
+﻿﻿import React, { useState, useEffect, useRef } from "react";
 import Head from 'next/head';
 import LostView from "@/components/LostView";
 import ElderlyKidFriendlyNav from "@/components/ElderlyKidFriendlyNav";
@@ -232,6 +232,74 @@ export default function MapPage() {
   const currentRouteRef = useRef<RouteInfo | null>(null);
 
   const t = translations[language];
+
+  // ---- safe-area helpers (iOS notch etc) ----
+  // (used only as strings in inline styles)
+  const uiPad = isMobile ? 10 : 18;
+  const uiTop = `calc(var(--sat) + ${uiPad}px)`;
+  const uiLeft = `calc(var(--sal) + ${uiPad}px)`;
+  const uiRight = `calc(var(--sar) + ${uiPad}px)`;
+  const uiBottom = `calc(var(--sab) + ${uiPad}px)`;
+
+  const resetMapAndSearch = () => {
+    // stop builder UI
+    setIsBuilderMode(false);
+    isBuilderModeRef.current = false;
+
+    setPinSegments([]);
+    setSegmentRoutes([]);
+    setHighlightedSegmentIndex(null);
+    setShowRouteSelector(false);
+
+    // clear destination + routes
+    setMainDestination(null);
+    destinationRef.current = null;
+    currentRouteRef.current = null;
+
+    setRoutes([]);
+    setSelectedRouteIndex(0);
+
+    // clear overlays
+    try {
+      highlightLayerRef.current?.remove?.();
+      highlightLayerRef.current = null;
+    } catch { }
+
+    try {
+      mainRoutePolylineRef.current?.remove?.();
+      mainRoutePolylineRef.current = null;
+    } catch { }
+
+    try {
+      routePolylinesRef.current.forEach((l) => l?.remove?.());
+      routePolylinesRef.current = [];
+    } catch { }
+
+    try {
+      pinMarkerLayersRef.current.forEach((m) => m?.remove?.());
+      pinMarkerLayersRef.current = [];
+    } catch { }
+
+    try {
+      segmentPolylinesRef.current.forEach((l) => l?.remove?.());
+      segmentPolylinesRef.current = [];
+    } catch { }
+
+    // reset search UI
+    setSearchQuery('');
+    setSearchResults([]);
+
+    // go to map screen (ready to search again)
+    setViewMode('map');
+
+    // best-effort center to user
+    const loc = userLocationRef.current;
+    if (loc && mapRef.current) {
+      mapRef.current.setView([loc.lat, loc.lng], 15, { animate: true });
+    }
+
+    setNotification({ type: 'info', msg: 'Reset' });
+  };
 
   // ---------- load persisted ----------
   useEffect(() => {
@@ -714,7 +782,7 @@ export default function MapPage() {
     if (mainDestination) {
       const icon = L.divIcon({
         className: 'bg-transparent',
-        html: `<div style="width: 50px; height: 50px; background: #0f172a; border: 4px solid white; border-radius: 50% 50% 50% 0; transform: rotate(-45deg); display: flex; align-items: center; justify-content: center; box-shadow: 0 10px 20px rgba(0,0,0,0.25);">
+        html: `<div style="width: 50px; height: 50px; background: #0f172a; border: 4px solid white; border-radius: 50% 50% 50% 0; transform: rotate(-45deg); display: flex; align-items: center; justify-content: center; box-shadow: 0 10px 24px rgba(0,0,0,0.18);">
                  <div style="transform: rotate(45deg); font-size: 18px; color: white; font-weight: bold;">A</div>
                </div>`,
         iconSize: [50, 50],
@@ -888,7 +956,7 @@ export default function MapPage() {
     pinSegments.forEach((pin) => {
       const icon = L.divIcon({
         className: 'bg-transparent',
-        html: `<div style="width: 42px; height: 42px; background: #10b981; border: 3px solid white; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: white; font-weight: bold; box-shadow: 0 10px 16px rgba(0,0,0,0.2);">${pin.letter}</div>`,
+        html: `<div style="width: 42px; height: 42px; background: #10b981; border: 3px solid white; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: white; font-weight: 900; box-shadow: 0 12px 22px rgba(0,0,0,0.14);">${pin.letter}</div>`,
         iconSize: [42, 42],
         iconAnchor: [21, 21]
       });
@@ -1198,9 +1266,20 @@ export default function MapPage() {
       <Head>
         <title>TapuTapu v12.3 Spring Edition</title>
         <style>{`
+          :root{
+            --sat: env(safe-area-inset-top, 0px);
+            --sar: env(safe-area-inset-right, 0px);
+            --sab: env(safe-area-inset-bottom, 0px);
+            --sal: env(safe-area-inset-left, 0px);
+          }
+
           * { margin: 0; padding: 0; box-sizing: border-box; }
           html, body { width: 100%; height: 100%; overflow: hidden !important; position: fixed !important; }
           #__next { width: 100%; height: 100%; overflow: hidden !important; }
+
+          /* Helps iOS Safari with notches + bottom bars */
+          body { padding-top: env(safe-area-inset-top); padding-bottom: env(safe-area-inset-bottom); }
+
           @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
           @keyframes float { 0%, 100% { transform: translateY(0px); } 50% { transform: translateY(-20px); } }
           .forest-animal { position: absolute; user-select: none; pointer-events: none; animation: float 4s ease-in-out infinite; }
@@ -1249,27 +1328,134 @@ export default function MapPage() {
                 <p style={{ fontSize: 16, color: '#1b4d1b', marginTop: 8, fontStyle: 'italic' }}>{t.navigateWithNature}</p>
               </div>
 
-              <button onClick={() => setViewMode('map')} style={{ width: 280, height: 70, borderRadius: 20, backgroundColor: '#10b981', color: 'white', fontSize: 28, fontWeight: 'bold', border: 'none', cursor: 'pointer' }}>{t.eikime}</button>
-              <button onClick={() => setViewMode('history')} style={{ width: 280, height: 70, borderRadius: 20, backgroundColor: '#3b82f6', color: 'white', fontSize: 28, fontWeight: 'bold', border: 'none', cursor: 'pointer' }}>{t.myTrails}</button>
-              <button onClick={() => setViewMode('photos')} style={{ width: 280, height: 70, borderRadius: 20, backgroundColor: '#f59e0b', color: 'white', fontSize: 28, fontWeight: 'bold', border: 'none', cursor: 'pointer' }}>{t.photos}</button>
-              <button onClick={() => setViewMode('lost')} style={{ width: 280, height: 70, borderRadius: 20, backgroundColor: '#dc2626', color: 'white', fontSize: 28, fontWeight: 'bold', border: 'none', cursor: 'pointer' }}>{t.sos}</button>
+              <button
+                onClick={() => setViewMode('map')}
+                style={{
+                  width: 280, height: 70, borderRadius: 20,
+                  backgroundColor: '#10b981', color: 'white',
+                  fontSize: 28, fontWeight: 'bold', border: 'none',
+                  cursor: 'pointer', boxShadow: '0 16px 26px rgba(0,0,0,0.12)'
+                }}
+              >
+                {t.eikime}
+              </button>
+
+              <button
+                onClick={() => setViewMode('history')}
+                style={{
+                  width: 280, height: 70, borderRadius: 20,
+                  backgroundColor: '#3b82f6', color: 'white',
+                  fontSize: 28, fontWeight: 'bold', border: 'none',
+                  cursor: 'pointer', boxShadow: '0 16px 26px rgba(0,0,0,0.12)'
+                }}
+              >
+                {t.jauBuvau}
+              </button>
+
+              <button
+                onClick={() => setViewMode('photos')}
+                style={{
+                  width: 280, height: 70, borderRadius: 20,
+                  backgroundColor: '#f59e0b', color: 'white',
+                  fontSize: 28, fontWeight: 'bold', border: 'none',
+                  cursor: 'pointer', boxShadow: '0 16px 26px rgba(0,0,0,0.12)'
+                }}
+              >
+                {t.photos}
+              </button>
+
+              <button
+                onClick={() => setViewMode('lost')}
+                style={{
+                  width: 280, height: 70, borderRadius: 20,
+                  backgroundColor: '#dc2626', color: 'white',
+                  fontSize: 28, fontWeight: 'bold', border: 'none',
+                  cursor: 'pointer', boxShadow: '0 16px 26px rgba(0,0,0,0.12)'
+                }}
+              >
+                {t.sos}
+              </button>
             </div>
 
-            <div style={{ position: 'absolute', bottom: 32, right: 32, zIndex: 10, display: 'flex', gap: 8 }}>
-              <button onClick={() => setLanguage('en')} style={{ width: 50, height: 50, borderRadius: '50%', backgroundColor: language === 'en' ? '#3b82f6' : '#f3f4f6', color: language === 'en' ? 'white' : '#111827', border: 'none', cursor: 'pointer', fontWeight: 'bold' }}>EN</button>
-              <button onClick={() => setLanguage('lt')} style={{ width: 50, height: 50, borderRadius: '50%', backgroundColor: language === 'lt' ? '#3b82f6' : '#f3f4f6', color: language === 'lt' ? 'white' : '#111827', border: 'none', cursor: 'pointer', fontWeight: 'bold' }}>LT</button>
+            <div style={{ position: 'absolute', bottom: `calc(var(--sab) + 32px)`, right: `calc(var(--sar) + 32px)`, zIndex: 10, display: 'flex', gap: 8 }}>
+              <button
+                onClick={() => setLanguage('en')}
+                style={{
+                  width: 50, height: 50, borderRadius: '50%',
+                  backgroundColor: language === 'en' ? '#3b82f6' : '#f3f4f6',
+                  color: language === 'en' ? 'white' : '#111827',
+                  border: 'none', fontWeight: 900, cursor: 'pointer'
+                }}
+              >
+                EN
+              </button>
+              <button
+                onClick={() => setLanguage('lt')}
+                style={{
+                  width: 50, height: 50, borderRadius: '50%',
+                  backgroundColor: language === 'lt' ? '#3b82f6' : '#f3f4f6',
+                  color: language === 'lt' ? 'white' : '#111827',
+                  border: 'none', fontWeight: 900, cursor: 'pointer'
+                }}
+              >
+                LT
+              </button>
             </div>
           </>
         )}
 
         {(viewMode === 'map' || viewMode === 'navigation') && (
           <>
-            {/* top-left: home + transport */}
-            <div style={{ position: 'absolute', top: isMobile ? 14 : 24, left: isMobile ? 14 : 24, zIndex: 1100, display: 'flex', alignItems: 'center', gap: 10, pointerEvents: 'auto' }}>
-              <button onClick={() => setViewMode('landing')} style={{ width: isMobile ? 44 : 46, height: isMobile ? 44 : 46, borderRadius: 18, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20, backgroundColor: '#a78bfa', color: 'white', border: '3px solid white', cursor: 'pointer' }}>⌂</button>
+            {/* top-left: home + transport + reset */}
+            <div style={{ position: 'absolute', top: uiTop, left: uiLeft, zIndex: 1100, display: 'flex', alignItems: 'center', gap: 10, pointerEvents: 'auto' }}>
+              <button
+                onClick={() => setViewMode('landing')}
+                style={{
+                  width: isMobile ? 44 : 46,
+                  height: isMobile ? 44 : 46,
+                  borderRadius: 18,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  backgroundColor: '#a78bfa',
+                  color: 'white',
+                  border: 'none',
+                  cursor: 'pointer',
+                  boxShadow: '0 12px 22px rgba(0,0,0,0.12)',
+                  fontSize: 18,
+                  fontWeight: 900
+                }}
+                title="Home"
+              >
+                🏠
+              </button>
 
               {viewMode === 'map' && (
-                <div style={{ backgroundColor: 'rgba(255,255,255,0.95)', backdropFilter: 'blur(12px)', boxShadow: '0 12px 22px rgba(0,0,0,0.10)', borderRadius: 9999, padding: 8, display: 'flex', alignItems: 'center', gap: 10, border: '1px solid rgba(255,255,255,0.6)' }}>
+                <button
+                  onClick={resetMapAndSearch}
+                  style={{
+                    width: isMobile ? 44 : 46,
+                    height: isMobile ? 44 : 46,
+                    borderRadius: 18,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    backgroundColor: 'rgba(255,255,255,0.95)',
+                    color: '#111827',
+                    border: '1px solid rgba(255,255,255,0.6)',
+                    cursor: 'pointer',
+                    boxShadow: '0 12px 22px rgba(0,0,0,0.10)',
+                    fontSize: 18,
+                    fontWeight: 900
+                  }}
+                  title="Reset map & search"
+                >
+                  ♻️
+                </button>
+              )}
+
+              {viewMode === 'map' && (
+                <div style={{ backgroundColor: 'rgba(255,255,255,0.95)', backdropFilter: 'blur(12px)', boxShadow: '0 12px 22px rgba(0,0,0,0.10)', borderRadius: 9999, padding: 8, display: 'flex', alignItems: 'center', gap: 8 }}>
                   {(['walking', 'cycling', 'driving'] as TransportMode[]).map((m) => (
                     <button
                       key={m}
@@ -1296,11 +1482,40 @@ export default function MapPage() {
             </div>
 
             {/* top-right: sound + language */}
-            <div style={{ position: 'absolute', top: isMobile ? 14 : 24, right: isMobile ? 14 : 24, zIndex: 1100, display: 'flex', gap: 10 }}>
-              <button onClick={() => setSoundEnabled(!soundEnabled)} style={{ width: isMobile ? 44 : 46, height: isMobile ? 44 : 46, borderRadius: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, backgroundColor: 'rgba(255,255,255,0.95)', border: '1px solid rgba(255,255,255,0.6)', cursor: 'pointer' }}>
+            <div style={{ position: 'absolute', top: uiTop, right: uiRight, zIndex: 1100, display: 'flex', gap: 10 }}>
+              <button
+                onClick={() => setSoundEnabled(!soundEnabled)}
+                style={{
+                  width: isMobile ? 44 : 46,
+                  height: isMobile ? 44 : 46,
+                  borderRadius: 9999,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  backgroundColor: 'rgba(255,255,255,0.92)',
+                  border: 'none',
+                  cursor: 'pointer',
+                  boxShadow: '0 12px 22px rgba(0,0,0,0.10)'
+                }}
+              >
                 {soundEnabled ? '🔊' : '🔇'}
               </button>
-              <button onClick={() => setLanguage(language === 'en' ? 'lt' : 'en')} style={{ width: isMobile ? 44 : 46, height: isMobile ? 44 : 46, borderRadius: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 'bold', backgroundColor: 'rgba(255,255,255,0.95)', border: '1px solid rgba(255,255,255,0.6)', cursor: 'pointer' }}>
+              <button
+                onClick={() => setLanguage(language === 'en' ? 'lt' : 'en')}
+                style={{
+                  width: isMobile ? 44 : 46,
+                  height: isMobile ? 44 : 46,
+                  borderRadius: 9999,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  backgroundColor: 'rgba(255,255,255,0.92)',
+                  border: 'none',
+                  cursor: 'pointer',
+                  boxShadow: '0 12px 22px rgba(0,0,0,0.10)',
+                  fontWeight: 900
+                }}
+              >
                 {language.toUpperCase()}
               </button>
             </div>
@@ -1311,9 +1526,9 @@ export default function MapPage() {
                 {/* Search bar */}
                 <div style={{
                   position: 'absolute',
-                  top: isMobile ? 68 : 86,
-                  left: isMobile ? 14 : 24,
-                  right: isMobile ? 14 : undefined,
+                  top: `calc(var(--sat) + ${isMobile ? 60 : 72}px)`,
+                  left: uiLeft,
+                  right: uiRight,
                   zIndex: 1200,
                   pointerEvents: 'auto',
                 }}>
@@ -1407,7 +1622,7 @@ export default function MapPage() {
 
                 {/* weather */}
                 {weather && !isMobile && (
-                  <div style={{ position: 'absolute', top: 140, left: 24, zIndex: 1100, backgroundColor: 'rgba(255,255,255,0.92)', backdropFilter: 'blur(12px)', borderRadius: 9999, padding: '8px 12px', display: 'flex', alignItems: 'center', gap: 10, border: '1px solid rgba(255,255,255,0.6)', boxShadow: '0 10px 18px rgba(0,0,0,0.08)' }}>
+                  <div style={{ position: 'absolute', top: `calc(var(--sat) + 124px)`, left: uiLeft, zIndex: 1100, backgroundColor: 'rgba(255,255,255,0.92)', backdropFilter: 'blur(12px)', borderRadius: 9999, padding: '8px 12px', display: 'flex', alignItems: 'center', gap: 10, boxShadow: '0 12px 22px rgba(0,0,0,0.10)' }}>
                     <span style={{ fontSize: 22 }}>{weather.icon}</span>
                     <div style={{ display: 'flex', flexDirection: 'column', lineHeight: 1.1 }}>
                       <span style={{ fontSize: 10, fontWeight: 'bold', color: '#9ca3af' }}>{t.weather}</span>
@@ -1421,15 +1636,32 @@ export default function MapPage() {
             {/* Floating buttons (map + navigation) */}
             <div style={{
               position: 'absolute',
-              top: isMobile ? 140 : 170,
-              right: isMobile ? 12 : 24,
+              top: `calc(var(--sat) + ${isMobile ? 120 : 150}px)`,
+              right: uiRight,
               zIndex: 1100,
               display: 'flex',
               flexDirection: 'column',
               gap: isMobile ? 12 : 16
             }}>
               {viewMode === 'map' && (
-                <button onClick={toggleRecording} style={{ width: isMobile ? 54 : 60, height: isMobile ? 54 : 60, borderRadius: 9999, boxShadow: '0 16px 26px rgba(0,0,0,0.12)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', backgroundColor: isRecording ? '#dc2626' : 'white', border: 'none', cursor: 'pointer' }}>
+                <button
+                  onClick={toggleRecording}
+                  style={{
+                    width: isMobile ? 54 : 60,
+                    height: isMobile ? 54 : 60,
+                    borderRadius: 9999,
+                    boxShadow: '0 16px 26px rgba(0,0,0,0.12)',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    backgroundColor: isRecording ? '#dc2626' : 'white',
+                    color: isRecording ? 'white' : '#111827',
+                    border: 'none',
+                    cursor: 'pointer'
+                  }}
+                  title="Record trail"
+                >
                   <div style={{ width: 14, height: 14, borderRadius: '50%', backgroundColor: isRecording ? 'white' : '#dc2626', animation: isRecording ? 'pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite' : 'none' }} />
                   <span style={{ fontSize: 8, marginTop: 6, fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: 0.5 }}>
                     {t.trailsBtn}{isRecording ? ` ${t.trailsOn}` : ''}
@@ -1477,14 +1709,45 @@ export default function MapPage() {
                       if (isMobile) setPitstopsCollapsed(false);
                     }
                   }}
-                  style={{ width: isMobile ? 54 : 60, height: isMobile ? 54 : 60, borderRadius: 9999, backgroundColor: isBuilderMode ? '#16a34a' : '#10b981', color: 'white', border: 'none', cursor: 'pointer', boxShadow: '0 16px 26px rgba(0,0,0,0.12)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}
+                  style={{
+                    width: isMobile ? 54 : 60,
+                    height: isMobile ? 54 : 60,
+                    borderRadius: 9999,
+                    backgroundColor: isBuilderMode ? '#16a34a' : '#10b981',
+                    color: 'white',
+                    border: 'none',
+                    cursor: 'pointer',
+                    boxShadow: '0 16px 26px rgba(0,0,0,0.12)',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    justifyContent: 'center'
+                  }}
+                  title="Pins"
                 >
                   <span style={{ fontSize: isMobile ? 20 : 22, fontWeight: 'bold' }}>{isBuilderMode ? '✓' : '+'}</span>
                   <span style={{ fontSize: 8, fontWeight: 'bold', textTransform: 'uppercase' }}>PIN</span>
                 </button>
               )}
 
-              <button onClick={() => mapRef.current?.locate({ setView: true, maxZoom: 15, enableHighAccuracy: true })} style={{ width: isMobile ? 54 : 60, height: isMobile ? 54 : 60, backgroundColor: '#16a34a', border: '4px solid white', borderRadius: 9999, cursor: 'pointer', boxShadow: '0 16px 26px rgba(0,0,0,0.12)', color: 'white', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
+              <button
+                onClick={() => mapRef.current?.locate({ setView: true, maxZoom: 15, enableHighAccuracy: true })}
+                style={{
+                  width: isMobile ? 54 : 60,
+                  height: isMobile ? 54 : 60,
+                  borderRadius: 9999,
+                  backgroundColor: '#16a34a',
+                  color: 'white',
+                  border: 'none',
+                  cursor: 'pointer',
+                  boxShadow: '0 16px 26px rgba(0,0,0,0.12)',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  justifyContent: 'center'
+                }}
+                title="Center on me"
+              >
                 <span style={{ fontSize: 18 }}>📍</span>
                 <span style={{ fontSize: 8, fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: 0.5 }}>HERE</span>
               </button>
@@ -1492,11 +1755,29 @@ export default function MapPage() {
 
             {/* navigation HUD */}
             {viewMode === 'navigation' && (
-              <div style={{ position: 'absolute', inset: 0, zIndex: 1100, display: 'flex', flexDirection: 'column', alignItems: 'flex-start', justifyContent: 'flex-start', paddingTop: isMobile ? 14 : 24, paddingLeft: isMobile ? 14 : 24, pointerEvents: 'none' }}>
-                <button onClick={() => setViewMode('map')} style={{ pointerEvents: 'auto', width: isMobile ? 48 : 56, height: isMobile ? 48 : 56, borderRadius: 18, backgroundColor: '#a78bfa', color: 'white', border: '3px solid white', cursor: 'pointer', fontWeight: 'bold', fontSize: 20 }}>⌂</button>
+              <div style={{ position: 'absolute', inset: 0, zIndex: 1100, display: 'flex', flexDirection: 'column', alignItems: 'flex-start', justifyContent: 'flex-start', paddingTop: uiPad, paddingLeft: uiPad }}>
+                <button
+                  onClick={() => setViewMode('map')}
+                  style={{
+                    pointerEvents: 'auto',
+                    width: isMobile ? 48 : 56,
+                    height: isMobile ? 48 : 56,
+                    borderRadius: 18,
+                    backgroundColor: '#a78bfa',
+                    color: 'white',
+                    border: 'none',
+                    cursor: 'pointer',
+                    boxShadow: '0 12px 22px rgba(0,0,0,0.12)',
+                    fontSize: 18,
+                    fontWeight: 900,
+                    marginTop: `calc(var(--sat) + 0px)`
+                  }}
+                >
+                  ←
+                </button>
 
                 {nextInstruction && (
-                  <div style={{ pointerEvents: 'auto', marginTop: 12, backgroundColor: 'rgba(255,255,255,0.95)', backdropFilter: 'blur(12px)', borderRadius: 18, padding: '10px 14px', boxShadow: '0 4px 12px rgba(0,0,0,0.12)', display: 'flex', alignItems: 'center', gap: 12 }}>
+                  <div style={{ pointerEvents: 'auto', marginTop: 12, backgroundColor: 'rgba(255,255,255,0.95)', backdropFilter: 'blur(12px)', borderRadius: 18, padding: '10px 14px', boxShadow: '0 4px 12px rgba(0,0,0,0.10)', maxWidth: 360 }}>
                     <span style={{ fontSize: 22 }}>🧭</span>
                     <div style={{ display: 'flex', flexDirection: 'column' }}>
                       <span style={{ fontSize: 10, fontWeight: 'bold', color: '#9ca3af', textTransform: 'uppercase', letterSpacing: 0.5 }}>{t.nextTurn}</span>
@@ -1505,7 +1786,7 @@ export default function MapPage() {
                   </div>
                 )}
 
-                <div style={{ pointerEvents: 'auto', marginTop: 12, backgroundColor: 'rgba(255,255,255,0.9)', backdropFilter: 'blur(12px)', borderRadius: 18, padding: '10px 16px', boxShadow: '0 4px 12px rgba(0,0,0,0.1)', display: 'flex', alignItems: 'center', gap: 16 }}>
+                <div style={{ pointerEvents: 'auto', marginTop: 12, backgroundColor: 'rgba(255,255,255,0.9)', backdropFilter: 'blur(12px)', borderRadius: 18, padding: '10px 16px', boxShadow: '0 4px 12px rgba(0,0,0,0.10)', display: 'flex', gap: 14 }}>
                   <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
                     <span style={{ fontSize: 9, fontWeight: 'bold', color: '#9ca3af', textTransform: 'uppercase', letterSpacing: 0.5 }}>{t.distance}</span>
                     <span style={{ fontSize: 16, fontWeight: 'bold', color: '#111827', marginTop: 2 }}>{formatDist(navStats.distanceRem)}</span>
@@ -1524,9 +1805,9 @@ export default function MapPage() {
               <div
                 style={{
                   position: 'absolute',
-                  left: isMobile ? 10 : 24,
-                  right: isMobile ? 10 : undefined,
-                  bottom: isMobile ? 10 : 24,
+                  left: `calc(var(--sal) + ${isMobile ? 10 : 24}px)`,
+                  right: isMobile ? `calc(var(--sar) + 10px)` : undefined,
+                  bottom: uiBottom,
                   zIndex: 1200,
                   pointerEvents: 'auto',
                   backgroundColor: 'rgba(255,255,255,0.92)',
@@ -1604,7 +1885,13 @@ export default function MapPage() {
                           )}
                         </div>
 
-                        <button onClick={(e) => { e.stopPropagation(); removePinSegment(pin.letter); }} style={{ width: 28, height: 28, borderRadius: '50%', backgroundColor: '#fee2e2', color: '#dc2626', border: 'none', cursor: 'pointer', fontWeight: 'bold' }}>×</button>
+                        <button
+                          onClick={(e) => { e.stopPropagation(); removePinSegment(pin.letter); }}
+                          style={{ width: 28, height: 28, borderRadius: '50%', backgroundColor: '#fee2e2', color: '#dc2626', border: 'none', cursor: 'pointer', fontWeight: 900 }}
+                          title={t.delete}
+                        >
+                          ×
+                        </button>
                       </div>
                     ))}
                   </div>
@@ -1618,9 +1905,21 @@ export default function MapPage() {
 
             {/* route selector (map view only) */}
             {viewMode === 'map' && mainDestination && routes.length > 0 && !isBuilderMode && (
-              <div style={{ position: 'absolute', bottom: isMobile ? 18 : 40, right: isMobile ? 14 : 32, zIndex: 1100, width: '100%', maxWidth: 420, pointerEvents: 'none', display: 'flex', flexDirection: 'column', gap: 16, alignItems: 'flex-end' }}>
+              <div style={{
+                position: 'absolute',
+                bottom: `calc(var(--sab) + ${isMobile ? 14 : 32}px)`,
+                right: `calc(var(--sar) + ${isMobile ? 10 : 24}px)`,
+                zIndex: 1100,
+                width: '100%',
+                maxWidth: 420,
+                pointerEvents: 'none',
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'flex-end',
+                gap: 10
+              }}>
                 {showRouteSelector && (
-                  <div style={{ pointerEvents: 'auto', backgroundColor: 'rgba(255,255,255,0.97)', backdropFilter: 'blur(12px)', borderRadius: 40, padding: 18, boxShadow: '0 25px 40px -5px rgba(0,0,0,0.15)', maxHeight: '55vh', overflow: 'auto', border: '2px solid white', width: '100%' }}>
+                  <div style={{ pointerEvents: 'auto', backgroundColor: 'rgba(255,255,255,0.97)', backdropFilter: 'blur(12px)', borderRadius: 40, padding: 18, boxShadow: '0 25px 40px -5px rgba(0,0,0,0.12)', width: '100%', maxWidth: 420 }}>
                     <h3 style={{ fontWeight: 'bold', fontSize: 13, textTransform: 'uppercase', letterSpacing: 1.5, color: '#2563eb', marginBottom: 12 }}>Routes</h3>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
                       {routes.map((route, idx) => (
@@ -1642,7 +1941,7 @@ export default function MapPage() {
                           }}
                         >
                           <div style={{ display: 'flex', alignItems: 'center', gap: 14, flex: 1 }}>
-                            <div style={{ width: 34, height: 34, backgroundColor: selectedRouteIndex === idx ? '#2563eb' : '#e5e7eb', color: 'white', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold' }}>
+                            <div style={{ width: 34, height: 34, backgroundColor: selectedRouteIndex === idx ? '#2563eb' : '#e5e7eb', color: 'white', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 900 }}>
                               {idx + 1}
                             </div>
                             <div style={{ display: 'flex', flexDirection: 'column' }}>
@@ -1657,20 +1956,51 @@ export default function MapPage() {
                   </div>
                 )}
 
-                <div style={{ pointerEvents: 'auto', backgroundColor: 'rgba(255,255,255,0.97)', backdropFilter: 'blur(12px)', borderRadius: 40, padding: 14, boxShadow: '0 25px 40px -5px rgba(0,0,0,0.15)', display: 'flex', alignItems: 'center', gap: 14, width: isMobile ? 320 : '100%' }}>
-                  <div onClick={() => setShowRouteSelector(!showRouteSelector)} style={{ flex: 1, display: 'flex', flexDirection: 'column', paddingLeft: 10, cursor: 'pointer' }}>
+                <div style={{ pointerEvents: 'auto', backgroundColor: 'rgba(255,255,255,0.97)', backdropFilter: 'blur(12px)', borderRadius: 40, padding: 14, boxShadow: '0 25px 40px -5px rgba(0,0,0,0.12)', width: '100%', maxWidth: 420 }}>
+                  <div onClick={() => setShowRouteSelector(!showRouteSelector)} style={{ display: 'flex', flexDirection: 'column', paddingLeft: 10, cursor: 'pointer' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                       <span style={{ fontSize: 22, fontWeight: 'bold', color: '#111827' }}>{formatTime(routes[selectedRouteIndex]?.summary.totalTime || 0)}</span>
-                      <span style={{ fontSize: 12, fontWeight: 'bold', color: '#2563eb', backgroundColor: '#dbeafe', paddingLeft: 10, paddingRight: 10, paddingTop: 5, paddingBottom: 5, borderRadius: 9999 }}>
+                      <span style={{ fontSize: 12, fontWeight: 'bold', color: '#2563eb', backgroundColor: '#dbeafe', paddingLeft: 10, paddingRight: 10, paddingTop: 5, paddingBottom: 5, borderRadius: 9 }}>
                         {(routes[selectedRouteIndex]?.summary.totalDistance / 1000).toFixed(2)} km
                       </span>
                     </div>
-                    <span style={{ fontSize: 10, fontWeight: 'bold', textTransform: 'uppercase', color: '#9ca3af', letterSpacing: 1.2, marginTop: 4 }}>{routes.length} ROUTE{routes.length === 1 ? '' : 'S'}</span>
+                    <span style={{ fontSize: 10, fontWeight: 'bold', textTransform: 'uppercase', color: '#9ca3af', letterSpacing: 1.2, marginTop: 4 }}>
+                      {routes.length} ROUTE{routes.length === 1 ? '' : 'S'}
+                    </span>
                   </div>
 
-                  <div style={{ display: 'flex', gap: 10 }}>
-                    <button onClick={() => { setMainDestination(null); setPinSegments([]); setRoutes([]); setShowRouteSelector(false); setHighlightedSegmentIndex(null); }} style={{ width: 46, height: 46, borderRadius: 9999, backgroundColor: '#fee2e2', color: '#dc2626', border: 'none', cursor: 'pointer', fontWeight: 'bold' }}>✕</button>
-                    <button onClick={() => { setViewMode('navigation'); destinationRef.current = mainDestination; lastAnnounceDistRef.current = 0; if (soundEnabled) playSound('navigation-start'); }} style={{ height: 46, paddingLeft: 22, paddingRight: 22, backgroundColor: '#2563eb', color: 'white', borderRadius: 9999, fontWeight: 'bold', fontSize: 14, boxShadow: '0 10px 15px -3px rgba(37, 99, 235, 0.30)', cursor: 'pointer', border: 'none', whiteSpace: 'nowrap' }}>GO</button>
+                  <div style={{ display: 'flex', gap: 10, marginTop: 10, justifyContent: 'flex-end' }}>
+                    <button
+                      onClick={() => { resetMapAndSearch(); }}
+                      style={{
+                        width: 46, height: 46, borderRadius: 18,
+                        backgroundColor: '#f3f4f6',
+                        border: 'none', cursor: 'pointer',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        fontSize: 18, fontWeight: 900
+                      }}
+                      title="Reset"
+                    >
+                      ♻️
+                    </button>
+                    <button
+                      onClick={() => {
+                        setViewMode('navigation');
+                        destinationRef.current = mainDestination;
+                        lastAnnounceDistRef.current = 0;
+                        if (soundEnabled) playSound('navigation-start');
+                      }}
+                      style={{
+                        width: 56, height: 46, borderRadius: 18,
+                        backgroundColor: '#2563eb',
+                        border: 'none', cursor: 'pointer',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        color: 'white', fontSize: 18, fontWeight: 900
+                      }}
+                      title="Start navigation"
+                    >
+                      ▶
+                    </button>
                   </div>
                 </div>
               </div>
@@ -1681,7 +2011,9 @@ export default function MapPage() {
         {viewMode === 'history' && (
           <div style={{ position: 'absolute', inset: 0, zIndex: 5000, backgroundColor: '#f8fafc', padding: 24, overflow: 'auto' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 24 }}>
-              <button onClick={() => setViewMode('landing')} style={{ width: 64, height: 64, backgroundColor: 'white', borderRadius: '50%', boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', border: 'none' }}>⌂</button>
+              <button onClick={() => setViewMode('landing')} style={{ width: 64, height: 64, backgroundColor: 'white', borderRadius: '50%', boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', border: 'none', cursor: 'pointer', fontSize: 20, fontWeight: 900 }}>
+                ←
+              </button>
               <h1 style={{ fontSize: 32, fontWeight: 'bold', color: '#111827', letterSpacing: -1 }}>{t.myTrails}</h1>
             </div>
 
@@ -1722,7 +2054,9 @@ export default function MapPage() {
         {viewMode === 'photos' && (
           <div style={{ position: 'absolute', inset: 0, zIndex: 5000, backgroundColor: '#fff7ed', padding: 24, overflow: 'auto' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 24 }}>
-              <button onClick={() => setViewMode('landing')} style={{ width: 64, height: 64, backgroundColor: 'white', borderRadius: '50%', boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', border: 'none' }}>⌂</button>
+              <button onClick={() => setViewMode('landing')} style={{ width: 64, height: 64, backgroundColor: 'white', borderRadius: '50%', boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', border: 'none', cursor: 'pointer', fontSize: 20, fontWeight: 900 }}>
+                ←
+              </button>
               <h1 style={{ fontSize: 32, fontWeight: 'bold', color: '#111827', letterSpacing: -1 }}>{t.photos}</h1>
 
               <button
@@ -1791,8 +2125,8 @@ export default function MapPage() {
         {notification && viewMode !== 'navigation' && (
           <div style={{
             position: 'absolute',
-            bottom: 18,
-            left: 18,
+            bottom: uiBottom,
+            left: uiLeft,
             zIndex: 8000,
             backgroundColor: 'rgba(17,24,39,0.92)',
             color: 'white',
